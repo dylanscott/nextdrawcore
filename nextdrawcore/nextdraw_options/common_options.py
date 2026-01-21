@@ -6,7 +6,8 @@ http://bantamtools.com
 
 import argparse
 
-from ink_extensions import inkex
+from nextdrawcore.plot_utils_import import from_dependency_import # plotink
+inkex = from_dependency_import('ink_extensions.inkex')
 
 def core_nextdraw_options(config):
     mode_options = core_mode_options(config)

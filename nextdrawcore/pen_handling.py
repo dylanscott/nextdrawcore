@@ -419,10 +419,6 @@ class PenHandler:
             (nd_ref.options.mode =="utility" and nd_ref.options.utility_cmd =="raise_pen"):
             self.status.init_goal[3] = True # Goal should be to initially raise pen.
 
-        if servo_initialized and (self.phys.z_up is not None):
-            if self.phys.z_up == self.status.init_goal[3]:
-                return # Servo initialized. No changes to heights, I/O pin, or position.
-
         servo_min = nd_ref.params.servo_min
         servo_pin = nd_ref.params.servo_pin
 
@@ -443,6 +439,10 @@ class PenHandler:
             int(round(servo_min + servo_slope * nd_ref.options.pen_pos_up)))
         nd_ref.machine.pen_pos_down(\
             int(round(servo_min + servo_slope * self.heights.pen_pos_down)))
+
+        if servo_initialized and (self.phys.z_up is not None):
+            if self.phys.z_up == self.status.init_goal[3]:
+                return # Servo initialized. Don't perform lifting/lowering.
 
         if not self.status.init_goal[3]: # Pen lowering requested
             v_time = self.heights.times.lower_time

@@ -285,10 +285,16 @@ class ResumeStatus:
         if not self.old.pause_warn:
             return None
         if nd_ref.params.pause_warning and self.old.pause_dist >= 0:
-            return_text = "This document looks like it was paused while plotting.\n\n"+\
-                "If you want to resume plotting, use the Resume function instead.\n"+\
-                "To start from the beginning anyway, run this again."
-            # self.copy_old()              # Keep all plot data BUT
+            return_text = "This document looks like it was paused while plotting.\n\n"
+
+            if nd_ref.options.submode=="none": # CLI and Python API return text
+                return_text += "To resume a plot, use the res_plot mode.\n" +\
+                    "Or, to start from the beginning of the file, \n" +\
+                    " (1) Plot the output SVG from this command or \n" +\
+                    " (2) use the strip_data utility command."
+            else: # GUI (Inkscape) return text
+                return_text += "To resume plotting, use the Resume function instead.\n" +\
+                    "To start from the beginning of the file, run this again."
             # self.new.pause_warn = 0      # Remove warning.
             # self.write_to_svg(nd_ref.svg)
             # nd_ref.plot_status.stopped = 106 # Resume warning
@@ -299,7 +305,9 @@ class ResumeStatus:
         """ Return a warning if one starts a new plot when there's data for resuming """
         self.copy_old()              # Keep all plot data BUT
         self.new.pause_warn = 0      # Remove warning.
-        self.write_to_svg(nd_ref.svg)
+
+        if not nd_ref.plot_status.secondary:
+            self.write_to_svg(nd_ref.svg)
 
     def res_plot_options_update(self, nd_ref):
         """ 

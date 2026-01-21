@@ -221,7 +221,7 @@ def enable_motors(nd_ref):
         local_speed_pendown = nd_ref.options.speed_pendown
 
     if not nd_ref.options.preview:
-        nd_ref.machine.command("CU,60,200") # Enable power monitoring, threshold 250.
+        nd_ref.machine.command("CU,60,135") # Enable power monitoring, threshold 135 (~4 V).
 
         response = nd_ref.machine.motors_query_enabled()
         if response is None:

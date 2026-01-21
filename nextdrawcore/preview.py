@@ -245,12 +245,9 @@ class Preview:
             if nd_ref.params.preview_paths in [1, 3]: # Render pen-down movement
                 if nd_ref.pen.status.preview_pen_state != 0:
                     self.path_data_pd.append(f'M{x_old_t:0.3f} {y_old_t:0.3f}')
-
-                # Following section -- adding sub-points to longer moves --
-                #   does not render correctly when auto-rotate is active.
-                #   However, it also does not appear to improve the actual
-                #   render quality significantly, since our current T3 moves
-                #   are essentially linear. Leaving it disabled for now.
+                    nd_ref.pen.status.preview_pen_state = 0
+                else:
+                    self.path_data_pd.append(f' {x_old_t:0.3f} {y_old_t:0.3f}')
 
                 self.path_data_pd.append(f' {x_new_t:0.3f} {y_new_t:0.3f}')
 

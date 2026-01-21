@@ -26,7 +26,7 @@ Requires Python 3.8 or newer
 """
 # pylint: disable=pointless-string-statement
 
-__version__ = '1.3'  # Dated 2024-07-10
+__version__ = '1.3.2'  # Dated 2024-10-06
 
 import copy
 import gettext
@@ -324,7 +324,8 @@ class NextDraw(inkex.Effect):
         else: # Only in "plot" or "layers": Check if there's a plot in progress...
             return_text = self.plot_status.resume.pause_warning(self)
             if return_text is not None:
-                self.user_message_fun(return_text)
+                if not self.plot_status.secondary: # Do not print warning for secondary units.
+                    self.user_message_fun(return_text)
                 self.plot_cleanup()     # Revert document; nothing plotted.
                 self.plot_status.resume.remove_pause_warning(self) # AFTER reverting...
                 return

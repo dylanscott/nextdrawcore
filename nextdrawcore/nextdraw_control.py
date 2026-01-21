@@ -23,6 +23,7 @@ http://bantamtools.com
 Requires Python 3.8 or newer
 """
 
+import copy
 import logging
 import time
 import signal
@@ -202,7 +203,7 @@ class NextDrawWrapperClass( inkex.Effect ):
 
         selected_options = {item: self.options.__dict__[item] for item in ['mode',
             'speed_pendown', 'speed_penup',  'accel', 'pen_pos_up', 'pen_pos_down',
-            'pen_rate_raise', 'pen_rate_lower', 'layer_option',
+            'pen_rate_raise', 'pen_rate_lower', 'layer_option', 'submode',
             'handling', 'report_time', 'utility_cmd', 'dist', 'homing',
             'layer', 'copies', 'page_delay', 'preview', 'rendering', 'model', 'penlift',
             'setup_type', 'auto_rotate', 'hiding', 'reordering',
@@ -219,7 +220,10 @@ class NextDrawWrapperClass( inkex.Effect ):
         else:
             nd.options.port_config = 2 # Use NextDraw specified by port
 
-        nd.document = self.document
+        if primary:
+            nd.document = self.document
+        else:
+            nd.document = copy.deepcopy(self.document)
         nd.original_document = self.document
 
         if hasattr(self, 'cli_api'):

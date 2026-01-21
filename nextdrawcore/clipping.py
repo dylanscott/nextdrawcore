@@ -9,7 +9,9 @@ import logging
 import pyclipper
 
 from nextdrawcore.path_objects import FillRule
-from plotink import plot_utils
+
+from nextdrawcore.plot_utils_import import from_dependency_import # plotink
+plot_utils = from_dependency_import('plotink.plot_utils')
 
 print_warnings = False # set to True to see warnings printed
 
