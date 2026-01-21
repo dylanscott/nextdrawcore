@@ -28,7 +28,7 @@ import math
 import time
 from collections import deque
 from itertools import islice
-from tqdm import tqdm
+# from tqdm import tqdm
 from lxml import etree
 from nextdrawcore import serial_utils
 
@@ -511,6 +511,7 @@ class ProgressBar:
         if not self.enable:
             return
 
+        from tqdm import tqdm
         total_val = math.ceil(self.total)
         if nd_ref.options.copies == 1:
             description='Plot Progress'

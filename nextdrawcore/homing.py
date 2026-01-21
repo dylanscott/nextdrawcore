@@ -59,13 +59,12 @@ class HomingClass:
             self.nd_ref.warnings.add_new('homing_voltage')
             self.mark_failed()  # Fail quickly and correctly if we do not have power.
             return False
-        elif self.nd_ref.params.skip_voltage_check:
-            # Special case. Even when we are 
+        if self.nd_ref.params.skip_voltage_check:
+            # Special case. Even when we are skipping voltage checks, homing needs it.
             if not self.nd_ref.machine.query_voltage(200):
                 self.nd_ref.warnings.add_new('homing_voltage')
-            self.mark_failed()  # Fail quickly and correctly if we do not have power.
-            return False
-
+                self.mark_failed()  # Fail quickly and correctly if we do not have power.
+                return False
 
         if self.nd_ref.params.resolution == 1:  # High-resolution mode
             self.res = 1

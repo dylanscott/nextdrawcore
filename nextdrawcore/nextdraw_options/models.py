@@ -345,3 +345,19 @@ def apply_model_and_handling(nd_ref, initialize=False):
         nd_ref.params.servo_move_min = nd_ref.params.overrides['servo_move_min']
     if nd_ref.params.overrides['servo_move_slope'] is not None:
         nd_ref.params.servo_move_slope = nd_ref.params.overrides['servo_move_slope']
+
+
+def find_curve_tolerance(nd_ref, handling_mode):
+    '''
+    Find the curve tolerance value, for a specific handling mode, and applying
+    overrides to that value, if so-configured.
+    '''
+
+    if handling_mode not in [1, 2, 3, 4]:
+        return None
+
+    curve_tolerance = handlers[handling_mode].tolerance
+
+    if nd_ref.params.overrides['curve_tolerance'] is not None:
+        curve_tolerance = nd_ref.params.overrides['curve_tolerance']
+    return curve_tolerance

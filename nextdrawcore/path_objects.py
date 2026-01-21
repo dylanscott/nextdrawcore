@@ -286,13 +286,15 @@ class LayerProperties: # pylint: disable=too-many-instance-attributes
     """
 
     def __init__(self):
-        self.skip = False   # If true, a non-printing layer (e.g., documentation or hidden)
-        self.number = None  # Layer "number" for the purposes of printing specific layers
-        self.pause = False  # If True, force a pause at the beginning of the layer
-        self.delay = None   # Delay (ms) at beginning of layer
-        self.speed = None   # Defined pen-down speed for the layer
-        self.height = None  # Defined pen-down height for the layer
-        self.text = ""      # Extra text in the layer name, e.g., human-readable name.
+        self.skip = False       # If true, a non-printing layer (e.g., documentation or hidden)
+        self.number = None      # Layer "number" for the purposes of printing specific layers
+        self.pause = False      # If True, force a pause at the beginning of the layer
+        self.delay = None       # Delay (ms) at beginning of layer
+        self.speed = None       # Defined pen-down speed for the layer
+        self.height = None      # Defined pen-down height for the layer
+        self.handling = None    # Defined handling mode for the layer
+        self.reorder = None     # Defined reordering parameter for the layer
+        self.text = ""          # Extra text in the layer name, e.g., human-readable name.
 
     def parse(self, layer_name):
         '''
@@ -316,7 +318,7 @@ class LayerProperties: # pylint: disable=too-many-instance-attributes
 
         while len(remainder) >= 3:
             key = remainder[:2].lower()
-            if key in ['+h', '+s', '+d']:
+            if key in ['+h', '+s', '+d', '+m', '+g']:
                 remainder = remainder[2:]
                 number_temp, remainder = find_int(remainder)
                 if number_temp is not None:
@@ -329,6 +331,13 @@ class LayerProperties: # pylint: disable=too-many-instance-attributes
                     if key == "+s":
                         if 1 <= number_temp <= 110:
                             self.speed = number_temp
+                    if key == "+m":
+                        if 1 <= number_temp <= 4:
+                            self.handling = number_temp
+                    if key == "+g":
+                        if 0 <= number_temp <= 4:
+                            self.reorder = number_temp
+
             else:
                 self.text = remainder
                 break
@@ -350,6 +359,10 @@ class LayerProperties: # pylint: disable=too-many-instance-attributes
             name_string += f"+h{self.height}"
         if self.speed is not None:
             name_string += f"+s{self.speed}"
+        if self.handling is not None:
+            name_string += f"+m{self.handling}"
+        if self.reorder is not None:
+            name_string += f"+g{self.reorder}"
         return name_string + self.text
 
 class LayerItem: # pylint: disable=too-few-public-methods

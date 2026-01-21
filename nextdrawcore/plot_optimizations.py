@@ -17,7 +17,7 @@
 """
 plot_optimizations.py
 
-Version 1.2.0   -   2022-10-25
+Version 1.3.0   -   2024-07-08
 
 This module provides some plot optimization tools.
 
@@ -68,27 +68,41 @@ def concatenate_paths(first_path, second_path):
     return first_path
 
 
-def connect_nearby_ends(digest, reverse, min_gap):
+def connect_nearby_ends(digest, min_gap, reordering_type):
     """
-    Step through all PathItem objects in each layer.
+    Where enabled, step through all PathItem objects in each layer.
     If the ends of two paths are close enough to join, then do so.
-    If reverse is True, then allow paths to be reversed as part of
+    If reversing is enabled, then allow paths to be reversed as part of
     the checks for whether path ends are close to one another.
 
     Inputs: digest: a path_objects.DocDigest object
-            reverse (boolean) - True if paths can be reversed
             min_gap (float) - Distance below which to join paths
+            reordering_type: integer 0 - 4, with these values:
+                0: Least; Only connect adjoining paths. [DEFAULT]
+                1: Basic; Also reorder paths for speed
+                2: Full; Also allow path reversal
+                3: [Reserved for future use; currently same as 2.]
+                4: None; Strictly preserve file order
     """
-    square_gap = min_gap * min_gap
 
     if min_gap < 0:  # Do not connect gaps
         return
+
+    square_gap = min_gap * min_gap
 
     def point_bounds(x_in, y_in):
         '''Inflate point by min_gap to xmin, ymin, xmax, ymax rectangular bounds'''
         return (x_in - min_gap, y_in - min_gap, x_in + min_gap, y_in + min_gap)
 
     for layer_item in digest.layers:
+
+        reordering_type_local = reordering_type
+        if layer_item.props.reorder is not None:
+            reordering_type_local = layer_item.props.reorder
+
+        if reordering_type_local == 4: # Strictly preserve plot order
+            continue # Do not join ends in this layer
+        reverse = (reordering_type_local in [2, 3])
 
         path_count = len(layer_item.paths)
         if path_count < 2:
@@ -260,7 +274,7 @@ def supersample(digest, tolerance):
 #         planning.resample_layer(nd_ref, layer_item)
 
 
-def reorder(digest, reverse):
+def reorder(digest, reordering_type):
     """
     Perform layer-aware path sorting, re-ordering paths within each layer for speed.
 
@@ -274,10 +288,27 @@ def reorder(digest, reverse):
             to an endpoint of this path is the lowest of any of the paths.
 
     Inputs: digest: a path_objects.DocDigest object
-            reverse (boolean) - True if paths can be reversed
+            reordering_type: integer 0 - 4, with these values:
+                0: Least; Only connect adjoining paths. [DEFAULT]
+                1: Basic; Also reorder paths for speed
+                2: Full; Also allow path reversal
+                3: [Reserved for future use; currently same as 2.]
+                4: None; Strictly preserve file order
+
+    In addition to the reordering_type input value, we also check to see if individual
+        layers have defined reordering parameters.
     """
 
     for layer_item in digest.layers:
+
+        reordering_type_local = reordering_type
+        if layer_item.props.reorder is not None:
+            reordering_type_local = layer_item.props.reorder
+
+        if reordering_type_local not in [1, 2, 3]:
+            continue # Do not reorder this layer
+        reverse = (reordering_type_local in [2, 3])
+
         available_count = len(layer_item.paths)
 
         if available_count <= 1:

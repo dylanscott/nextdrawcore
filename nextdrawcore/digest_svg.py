@@ -23,7 +23,7 @@ formats for easier processing
 Part of the NextDraw driver software
 http://bantamtools.com
 
-Requires Python 3.7 or newer.
+Requires Python 3.8 or newer.
 """
 
 import logging
@@ -31,6 +31,7 @@ from math import sqrt
 
 from lxml import etree
 
+from nextdrawcore.nextdraw_options import models
 from nextdrawcore.plot_utils_import import from_dependency_import # plotink
 path_objects = from_dependency_import('nextdrawcore.path_objects')
 simplepath = from_dependency_import('ink_extensions.simplepath')
@@ -39,7 +40,6 @@ cubicsuperpath = from_dependency_import('ink_extensions.cubicsuperpath')
 simpletransform = from_dependency_import('ink_extensions.simpletransform')
 inkex = from_dependency_import('ink_extensions.inkex')
 message = from_dependency_import('ink_extensions_utils.message')
-# https://github.com/evil-mad/plotink
 plot_utils = from_dependency_import('plotink.plot_utils')
 
 logger = logging.getLogger(__name__)
@@ -47,15 +47,14 @@ logger = logging.getLogger(__name__)
 
 class DigestSVG:# pylint: disable=pointless-string-statement
     """
-    Main class for parsing SVG document and "digesting" it into a
-    path_objects.DocDigest object, a heavily simplified representation of the
-    SVG contents.
+    Main class for parsing SVG document and "digesting" it into a path_objects.DocDigest
+    object, a heavily simplified representation of the SVG contents.
     """
 
     logging_attrs = {"default_handler": message.UserMessageHandler()}
     spew_debugdata = False
 
-    def __init__(self, default_logging=True):
+    def __init__(self, nd_ref, default_logging=True):
         # Create instance variables
 
         if default_logging:
@@ -64,6 +63,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         if self.spew_debugdata:
             logger.setLevel(logging.DEBUG) # by default level is INFO
 
+        self.nd_ref = nd_ref
         self.use_tag_nest_level = 0
         self.current_layer = None
         self.current_layer_name = ""
@@ -72,14 +72,14 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         self.doc_digest = path_objects.DocDigest()
 
         # Variables that will be populated in process_svg():
-        self.bezier_tolerance = 0
+        self.bezier_tolerance = 0   # Bezier tolerance
         self.layer_selection = -2 # All layers; Matches default from plot_status.py
 
         self.doc_width_100 = 0
         self.doc_height_100 = 0
         self.diagonal_100 = 0
 
-    def process_svg(self, node_list, warnings, digest_params, mat_current=None):
+    def process_svg(self, node_list, digest_params, mat_current=None):
         """
         Wrapper around routine to recursively traverse an SVG document.
 
@@ -88,7 +88,6 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
         Inputs:
         node_list, an lxml etree representing an SVG document
-        warnings, a plot_warnings.PlotWarnings object
         digest_params, a tuple with additional parameters
         mat_current, a transformation matrix
 
@@ -102,9 +101,12 @@ class DigestSVG:# pylint: disable=pointless-string-statement
             or styles.
         """
 
-        [self.doc_digest.width, self.doc_digest.height, scale_x, scale_y, self.layer_selection,\
-            self.bezier_tolerance]\
-            = digest_params
+        [scale_x, scale_y, self.layer_selection] = digest_params
+
+        self.doc_digest.width = self.nd_ref.svg_width
+        self.doc_digest.height = self.nd_ref.svg_height
+
+        self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3 # Initialize
 
         # Store document information in doc_digest
         self.doc_digest.viewbox = f"0 0 {self.doc_digest.width:f} {self.doc_digest.height:f}"
@@ -127,11 +129,11 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         self.current_layer = root_layer # Layer that graphical elements should be added to
         self.current_layer_name = root_layer.name
 
-        self.traverse(node_list, None, warnings, mat_current)
+        self.traverse(node_list, None, mat_current)
         return self.doc_digest
 
 
-    def traverse(self, node_list, parent_style, warnings, mat_current):
+    def traverse(self, node_list, parent_style, mat_current):
         """
         Recursively traverse the SVG file and process all of the paths. Keep
         track of the composite transformation applied to each path.
@@ -139,7 +141,6 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         Inputs:
         node_list, an lxml etree representing an SVG document
         parent_style, dict from inherit_style
-        warnings, a plot_warnings.PlotWarnings object
         mat_current, a transformation matrix
 
         This function handles path, group, line, rect, polyline, polygon,
@@ -211,8 +212,17 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     self.doc_digest.layers.append(new_layer)
                     self.current_layer = new_layer
                     self.current_layer_name = str(str_layer_name)
+                    if self.current_layer.props.handling is None:
+                        self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3
+                    else:
+                        tolerance_temp = models.find_curve_tolerance(self.nd_ref,\
+                            self.current_layer.props.handling)
+                        if tolerance_temp is not None:
+                            self.bezier_tolerance = tolerance_temp/3
+                        else:
+                            self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3
 
-                    self.traverse(node, style_dict, warnings, mat_new)
+                    self.traverse(node, style_dict, mat_new)
 
                     # After parsing a layer, add a new "root layer" for any objects
                     # that may appear in root before the next layer:
@@ -226,26 +236,26 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     self.current_layer = new_layer
                     self.current_layer_name = new_layer.name
                 else: # Regular group or sublayer that we treat as a group.
-                    self.traverse(node, style_dict, warnings, mat_new)
+                    self.traverse(node, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}symbol', 'symbol'):
                 # A symbol is much like a group, except that it should only
                 #       be rendered when called within a "use" tag.
                 if self.use_tag_nest_level > 0:
-                    self.traverse(node, style_dict, warnings, mat_new)
+                    self.traverse(node, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}a', 'a'):
                 # An 'a' is much like a group, in that it is a generic container element.
-                self.traverse(node, style_dict, warnings, mat_new)
+                self.traverse(node, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}switch', 'switch'):
                 # A 'switch' is much like a group, in that it is a generic container element.
                 # We are not presently evaluating conditions on switch elements, but parsing
                 # their contents to the extent possible.
-                self.traverse(node, style_dict, warnings, mat_new)
+                self.traverse(node, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}use', 'use'):
@@ -280,7 +290,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                         else:
                             mat_new2 = mat_new
                         self.use_tag_nest_level += 1 # Keep track of nested "use" elements.
-                        self.traverse(refnode, style_dict, warnings, mat_new2)
+                        self.traverse(refnode, style_dict, mat_new2)
                         self.use_tag_nest_level -= 1
                 continue
 
@@ -466,11 +476,11 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
             if node.tag in ('{http://www.w3.org/2000/svg}text', 'text',
                             '{http://www.w3.org/2000/svg}flowRoot', 'flowRoot'):
-                warnings.add_new('text', self.current_layer_name)
+                self.nd_ref.warnings.add_new('text', self.current_layer_name)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}image', 'image'):
-                warnings.add_new('image', self.current_layer_name)
+                self.nd_ref.warnings.add_new('image', self.current_layer_name)
                 continue
             if not isinstance(node.tag, str):
                 # This is likely an XML processing instruction such as an XML
@@ -479,7 +489,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                 # Converting it to a printable string likely won't be useful.
                 continue
             text = str(node.tag).split('}')
-            warnings.add_new(str(text[-1]), self.current_layer_name)
+            self.nd_ref.warnings.add_new(str(text[-1]), self.current_layer_name)
 
     def digest_path(self, path_d, style_dict, mat_transform):
         """
@@ -496,6 +506,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
         if path_d is None:
             return
+        path_d = path_d.strip()
         if path_d == "":
             return
 

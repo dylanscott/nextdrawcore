@@ -127,8 +127,6 @@ def report_software_version(
     name_readable = software_name
     if software_name == "NextDraw Control":
         name_readable = "Bantam Tools NextDraw™"
-    if software_name == "NextDraw Merge":
-        name_readable = "Bantam Tools NextDraw™ Merge"
 
     message_fun(f"This is {name_readable} version {local_version}.")
 
@@ -140,7 +138,7 @@ def report_software_version(
                 f"{stable_version}.")
         if stable_updates_url: # NextDraw Control, probably
             message_fun(f"Please visit: {stable_updates_url} for the latest software.")
-        else: # Merge, probably
+        else: # Other software
             message_fun(update_contact_str)
     elif local_version > stable_version:
         message_fun("(An early-release version)")
@@ -157,7 +155,7 @@ def report_software_version(
 
 def report_ebb_version(fw_version_string, online_versions, message_fun):
     '''
-    this is easily used by any consumers of nextdrawcore, e.g. hershey advanced
+    this is easily used by any consumers of nextdrawcore
 
     `online_versions` is False if we failed or didn't try to get the online versions
     '''
@@ -188,7 +186,7 @@ def report_version_info(nd_ref, message_fun):
         voltage, current = nd_ref.machine.query_current()
         report_ebb_version(nd_ref.machine.version, online_versions, message_fun)
     elif nd_ref.options.preview:
-        message_fun('\nFirmware version readout not available in preview mode.')
+        message_fun(f"\nFirmware version checking not available in preview mode.")
 
     message_fun('\nAdditional system information:')
     message_fun(sys.version)

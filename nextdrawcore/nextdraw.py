@@ -26,7 +26,7 @@ Requires Python 3.8 or newer
 """
 # pylint: disable=pointless-string-statement
 
-__version__ = '1.1'  # Dated 2024-05-27
+__version__ = '1.3'  # Dated 2024-07-10
 
 import copy
 import gettext
@@ -571,17 +571,13 @@ class NextDraw(inkex.Effect):
             self.digest.from_plob(self.svg)
             self.plot_status.resume.new.plob_version = str(path_objects.PLOB_VERSION)
         else: # Process the input SVG into a simplified, restricted-format DocDigest object:
-            digester = digest_svg.DigestSVG() # Initialize class
+            digester = digest_svg.DigestSVG(self) # Initialize class
             if self.options.hiding: # Process all visible layers
-                digest_params = [self.svg_width, self.svg_height, s_x, s_y,\
-                    -2, self.params.curve_tolerance/3]
-
+                digest_params = [s_x, s_y, -2]
             else: # Process only selected layer, if in layers mode
-                digest_params = [self.svg_width, self.svg_height, s_x, s_y,\
-                    self.plot_status.resume.new.layer, self.params.curve_tolerance/3]
+                digest_params = [s_x, s_y, self.plot_status.resume.new.layer]
 
-            self.digest = digester.process_svg(self.svg, self.warnings,
-                digest_params, self.svg_transform,)
+            self.digest = digester.process_svg(self.svg, digest_params, self.svg_transform)
 
             if self.rotate_page: # Rotate digest
                 self.digest.rotate(self.params.auto_rotate_ccw)
@@ -621,21 +617,15 @@ class NextDraw(inkex.Effect):
                 fill colors and possibly other factors.
             """
 
-            """
-            Optimize digest
-            """
+            """ Optimize digest  """
 
-            allow_reverse = self.options.reordering in [2, 3]
-
-            if self.options.reordering < 3: # Set reordering to 4 to disable path joining
-                plot_optimizations.connect_nearby_ends(self.digest, allow_reverse,\
-                    self.params.min_gap)
+            plot_optimizations.connect_nearby_ends(self.digest,\
+                self.params.min_gap, self.options.reordering)
 
             plot_optimizations.supersample(self.digest,\
                 self.params.curve_tolerance/3)
 
             # plot_optimizations.supersample_new(self) # WIP supersampling disabled at present.
-
 
             self.randomize_optimize(True) # Do plot randomization & optimizations
 
@@ -655,10 +645,8 @@ class NextDraw(inkex.Effect):
                 self.plot_status.resume.new.rand_seed = int(time.time()*100)
             plot_optimizations.randomize_start(self.digest, self.plot_status.resume.new.rand_seed)
 
-        allow_reverse = self.options.reordering in [2, 3]
 
-        if self.options.reordering in [1, 2, 3]:
-            plot_optimizations.reorder(self.digest, allow_reverse)
+        plot_optimizations.reorder(self.digest, self.options.reordering)
 
         if first_copy and self.options.digest: # Will return Plob, not full SVG; back it up here.
             self.backup_original = copy.deepcopy(self.digest.to_plob())
@@ -915,8 +903,9 @@ class NextDraw(inkex.Effect):
             self.user_message_fun('\nPlot paused by keyboard interrupt.\n')
 
         if (self.plot_status.stopped < 0) or (pause_button_pressed != 0):
-            # Update pause position stats, subtracting any queued pen-down moves:
-            self.plot_status.resume.drip.queued_dist(self)
+            # Update pause position stats, subtracting any queued pen-down moves,
+            if self.plot_status.stopped != -1: # except in cases of programmatic pauses
+                self.plot_status.resume.drip.queued_dist(self)
 
         if pause_button_pressed == -1: # Possible future change: Customize with model name
             self.user_message_fun('\nError: USB connection lost during plot. ' +\
