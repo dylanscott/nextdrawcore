@@ -1,0 +1,3 @@
+This repository is an unofficial mirror of the `nextdrawcore` Python package for interacting with the Bantam Tools NextDraw line of pen plotters (and their AxiDraw predecessors). This code is not hosted publicly in the [Bantam Tools](https://github.com/bantamtools) organization as far as I can tell, but it is GPL licensed (forked from [this AxiDraw code](https://github.com/evil-mad/axidraw)?), and included in the [NextDraw Python library](https://bantam.tools/nd_py/) and Inkscape extension.
+
+I take no credit for any of this code. I created this repository only to make it easier for myself to learn how my pen plotter works.
