@@ -186,7 +186,7 @@ def report_version_info(nd_ref, message_fun):
         voltage, current = nd_ref.machine.query_current()
         report_ebb_version(nd_ref.machine.version, online_versions, message_fun)
     elif nd_ref.options.preview:
-        message_fun(f"\nFirmware version checking not available in preview mode.")
+        message_fun("\nFirmware version checking not available in preview mode.")
 
     message_fun('\nAdditional system information:')
     message_fun(sys.version)
@@ -210,3 +210,36 @@ def min_fw_version(nd_ref, version_string):
     if nd_ref.machine.version_parsed >= version.parse(version_string):
         return True
     return False
+
+def min_merge_version(ext_call, merge_version):
+    '''
+    Check to see if a NextDraw Merge version is defined. If it is,
+    then assert what the minimum version required is.
+    '''
+    old_version = False
+    old_version_string = ""
+
+    if not ext_call:
+        return None     # No external caller. No worries.
+    if ext_call is True: # Boolean; Called by something out of date.
+        old_version = True
+
+    if isinstance(ext_call, str):
+        if ext_call[0:15] == 'nextdraw merge,':
+            old_version_string = ext_call[15:]
+            if version.parse(old_version_string) < version.parse(merge_version):
+                old_version = True
+
+    if old_version:
+        if old_version_string != "":
+            old_version_string = ",\nand you currently have version NextDraw Merge " +\
+                                f"version {old_version_string} installed."
+        else:
+            old_version_string = "."
+
+        return_string = "Error: Your NextDraw Merge software needs to be updated.\n\n" +\
+        f"The minimum required version of NextDraw Merge is {merge_version}" +\
+        old_version_string
+
+        return return_string
+    return None

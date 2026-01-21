@@ -11,5 +11,9 @@ def get_conf(conf_module):
     This comes up in tests and in multi-NextDraw setups.
     """
     params = import_module(conf_module) # Configuration file
-    params = SimpleNamespace(**copy.deepcopy(params.__dict__))
-    return params # todo, remove dudner methods if time
+
+    # remove dunder methods/keys, which are a) irrelevant and b) cause problems with deepcopy/pickling
+    clean_params = { key: value for key, value in params.__dict__.items() if key[:2] != "__" }
+
+    clean_params = SimpleNamespace(**copy.deepcopy(clean_params))
+    return clean_params

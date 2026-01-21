@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -52,6 +52,7 @@ PLOB_BASE = """<?xml version="1.0" standalone="no"?>
    xmlns="http://www.w3.org/2000/svg"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:nd="https://bantam.tools/nd"
    version="1.1">
    </svg>
 """
@@ -75,6 +76,9 @@ class PathItem:
     - fill: fill color or None
     - fill_rule: corresponding to the SVG fill-rule
     - item_id: A unique ID string
+    - flat_length: length of the path (if flattened and calculated)
+
+    Two additional elements are reserved for future use:
     - base_length: Length of the path, if computed, without ramps. Initialized as None.
     - ramp_data: List with data about lead-in/out ramps:
             [start ramp length, start lead length, end ramp length, end lead length]
@@ -102,8 +106,9 @@ class PathItem:
         self.fill = None        # fill color or None
         self.fill_rule = None   # May be None, "nonzero", or "evenodd"
         self.item_id = None     # string
-        self.base_length = None # path length (base length, without ramps).
-        self.ramp_data = None   # list with data about lead-in/out ramps. None, for no ramps.
+        self.flat_length = None # Store length of path, if flattened
+        # self.base_length = None # path length (base length, without ramps).
+        # self.ramp_data = None   # list with data about lead-in/out ramps. None, for no ramps.
 
     @classmethod
     def from_attrs(cls, **kwargs):
@@ -157,6 +162,9 @@ class PathItem:
         if self.subpaths is None:
             return 0
 
+        if self.flat_length is not None:
+            return self.flat_length # Avoid calculating more than once
+
         subpath = self.subpaths[0]
         vertex_count = len(subpath)
         vertex_count_less_1 = vertex_count - 1
@@ -167,7 +175,8 @@ class PathItem:
             d_y = subpath[index+1][1] - subpath[index][1]
             total_length += sqrt(d_x * d_x + d_y * d_y)
             index += 1
-        self.base_length = total_length
+        # self.base_length = total_length # Not yet implemented
+        self.flat_length = total_length
         return total_length
 
 
@@ -202,6 +211,7 @@ class PathItem:
 
         if index == vertex_count_less_1:
             subpath[:] = [] # Target is past the end of this subpath; crop entire subpath.
+            self.flat_length = None
             return
 
         new_seg_fraction = (target - subpath_length)/this_seg_dist
@@ -210,6 +220,8 @@ class PathItem:
         subpath[index][0] = subpath[index][0] + d_x
         subpath[index][1] = subpath[index][1] + d_y
         subpath[:] = subpath[index:]
+
+        self.flat_length = None # Clear previous value of the path length.
 
 
     def closed(self):
@@ -256,8 +268,7 @@ class PathItem:
 
         return f"{type(self).__name__}(\n  subpaths={self.subpaths},\n" +\
             f"  fill={self.fill},\n  fill_rule={self.fill_rule},\n" +\
-            f"  stroke={self.stroke},\n  item_id={self.item_id},\n" +\
-            f"  ramp_data={self.ramp_data})"
+            f"  stroke={self.stroke},\n  item_id={self.item_id},\n"
 
 def find_int(name_string):
     '''
@@ -549,11 +560,11 @@ class DocDigest:
         """
 
         plob = etree.fromstring(PLOB_BASE)
-        plob.set('encoding', "UTF-8")
+        plob_tree = etree.ElementTree(plob)
 
+        plob.set('encoding', "UTF-8")
         plob.set('width', f"{self.width:f}in")
         plob.set('height', f"{self.height:f}in")
-
         plob.set('viewBox', str(self.viewbox))
         plob.set(inkex.addNS('docname', 'sodipodi'), self.name)
 
@@ -564,7 +575,8 @@ class DocDigest:
         for key, value in self.metadata.items():
             plob_metadata.set(key, str(value))
 
-        plotdata = etree.SubElement(plob, 'plotdata')
+        plotdata = etree.SubElement(plob, etree.QName('https://bantam.tools/nd', 'plotdata'))
+
         for key, value in self.plotdata.items():
             plotdata.set(key, str(value))
 
@@ -587,13 +599,13 @@ class DocDigest:
                     polyline_node = etree.SubElement(new_layer, 'polyline')
                     polyline_node.set('id', path.item_id)
                     polyline_node.set('points', poly_string)
-        return plob
+        return plob_tree
 
     def from_plob(self, plob):
         """
-        Import data from an input "Plob" SVG etree object, and use it to
-        populate the contents of this DocDigest object. Clobber any
-        existing contents of the DocDigest object.
+        Import data from an input "Plob" SVG lxml.etree._Element object,
+        and use it to populate the contents of this DocDigest object.
+        Clobber any existing contents of the DocDigest object.
 
         This function is for use _only_ on an input etree that is in the Plob
         format, not a full SVG file with arbitrary contents.

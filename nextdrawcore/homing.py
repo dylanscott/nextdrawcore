@@ -1,9 +1,9 @@
 '''
 homing.py
 
-Homing functions for NextDraw. (Not supported on legacy models.) 
+Homing functions for NextDraw. (Not supported on legacy models.)
 
-Copyright 2024 Windell H. Oskay, Bantam Tools
+Copyright 2025 Windell H. Oskay, Bantam Tools
 
 The MIT License (MIT)
 
@@ -27,8 +27,44 @@ SOFTWARE.
 
 '''
 
+# import sys
 import time # time.sleep function is used
 from nextdrawcore import serial_utils
+from nextdrawcore.plot_utils_import import from_dependency_import # plotink
+plot_utils = from_dependency_import('plotink.plot_utils')
+
+
+def xy_to_step_pos(nd_ref, x_in, y_in):
+    '''
+    Find and return the absolute (A, B) step position corresponding to a given
+    (X, Y) position in inches.
+    Inputs x_in, y_in are in inches
+    '''
+
+    if nd_ref.params.resolution == 2:  # Low-resolution mode
+        x_in /= 2
+        y_in /= 2
+
+    a_steps = round((2 * nd_ref.params.native_res_factor) * (x_in + y_in))
+    b_steps = round((2 * nd_ref.params.native_res_factor) * (x_in - y_in))
+
+    return(a_steps, b_steps)
+
+def steps_to_xy_pos(nd_ref, a_steps, b_steps):
+    '''
+    Find and return the (X, Y) carriage position in inches, corresponding to a given
+    (A, B) motor step position. 
+    Inputs a_steps, b_steps are integer step positions.
+    '''
+
+    x_pos = (a_steps + b_steps) / (4 * nd_ref.params.native_res_factor)
+    y_pos = (a_steps - b_steps) / (4 * nd_ref.params.native_res_factor)
+
+    if nd_ref.params.resolution == 2:  # Low-resolution mode
+        x_pos *= 2
+        y_pos *= 2
+
+    return(x_pos, y_pos)
 
 class HomingClass:
     ''' Class to manage homing functions '''
@@ -49,55 +85,66 @@ class HomingClass:
         self.res = 0            # Resolution value, 1: High, 2: Low
 
     def find_home(self):
-        '''Main homing function'''
+        '''
+        Main homing function.
+        If the machine is connected and we are not in preview mode:
+            If automatic homing is enabled:
+                Run the automatic homing routine
+            else:
+                Essentially, pretend that we did.
+            Finally, set the step position to 0 and tell the machine it is homed.
+        '''
 
-        self.step_scale = self.nd_ref.step_scale
         if self.nd_ref.options.preview:
             return True
 
-        if 'voltage' in self.nd_ref.warnings.warning_dict:
-            self.nd_ref.warnings.add_new('homing_voltage')
-            self.mark_failed()  # Fail quickly and correctly if we do not have power.
+        do_auto_homing = self.nd_ref.options.homing and self.nd_ref.params.auto_home
+
+        if (self.nd_ref.machine.port is None) or (self.nd_ref.machine.err is not None):
+            self.mark_failed()
             return False
-        if self.nd_ref.params.skip_voltage_check:
-            # Special case. Even when we are skipping voltage checks, homing needs it.
-            if not self.nd_ref.machine.query_voltage(200):
+
+        if self.nd_ref.machine.var_read(12): # Read machine state: is it already fully homed?
+            self.read_position() # Already homed! Set xpos, ypos values
+            return True
+
+        if do_auto_homing:
+            if 'voltage' in self.nd_ref.warnings.warning_dict:
                 self.nd_ref.warnings.add_new('homing_voltage')
                 self.mark_failed()  # Fail quickly and correctly if we do not have power.
                 return False
+            if self.nd_ref.params.skip_voltage_check:
+                # Special case; Automatic homing needs enough voltage to function properly.
+                if not self.nd_ref.machine.query_voltage(200):
+                    self.nd_ref.warnings.add_new('homing_voltage')
+                    self.mark_failed()  # Fail quickly and correctly if we do not have power.
+                    return False
 
-        if self.nd_ref.params.resolution == 1:  # High-resolution mode
-            self.res = 1
-        else:  # i.e., nd_ref.params.resolution == 2; Low-resolution mode
-            self.res = 2
+            self.step_scale = self.nd_ref.step_scale
 
-        if (self.nd_ref.machine.port is None) or (self.nd_ref.machine.err is not None):
-            self.failed = True
-            self.mark_failed()
-            return False
+            if self.nd_ref.params.resolution == 1:  # High-resolution mode
+                self.res = 1
+            else:  # i.e., nd_ref.params.resolution == 2; Low-resolution mode
+                self.res = 2
 
-        if self.nd_ref.machine.var_read(12):
-            return True # Read machine state: is it already fully homed?
+            self.rhm_homing() # Homing of Right-Hand Motor (RHM); Gets close on LHM, too.
+            if self.failed:
+                self.mark_failed()
+                return False
+            self.nd_ref.machine.clear_steps()
+            self.lhm_homing()
 
-        self.rhm_homing() # Homing of Right-Hand Motor (RHM); Gets close on LHM, too.
         if self.failed:
             self.mark_failed()
             return False
 
-        self.nd_ref.machine.clear_steps()
-        self.lhm_homing()
-
-        if self.failed:
-            self.mark_failed()
-            return False
-
-        # Set the bits that mark the machine as homed.
-        self.nd_ref.machine.clear_steps()
-        self.nd_ref.machine.var_write(1, 12) # Update machine state: fully homed.
+        # Clear step counters and set the bits that mark the machine as homed:
+        self.set_home()
         return True
 
     def mark_failed(self):
         ''' Housekeeping after homing sequence fails '''
+        self.failed = True
         if self.nd_ref.plot_status.stopped == 0:    # Only if no other error is present:
 
             if 'voltage' in self.nd_ref.warnings.warning_dict: # Power loss is likely issue!
@@ -560,25 +607,133 @@ class HomingClass:
         ''' Read XY position from machine and set global position to that value '''
 
         if self.nd_ref.options.preview:
+            self.nd_ref.pen.phys.accum1 = 0                     # Clear accumulator value
+            self.nd_ref.pen.phys.accum2 = 0                     # Clear accumulator value
+        if (self.nd_ref.machine.port is None) or (self.nd_ref.machine.err is not None):
             return
 
         serial_utils.exhaust_queue(self.nd_ref) # Wait until all motion stops
+
         pos = self.nd_ref.machine.query_steps() #   before querying motor position.
-        if pos is None:
+        offset = serial_utils.read_step_offsets(self.nd_ref) # Query offset position
+        if (pos is None) or offset is None:
+            self.message_fun("Error reading step positions.")
             return
 
-        a_pos, b_pos = pos
-        xpos = (a_pos + b_pos) / (4 * self.nd_ref.params.native_res_factor)
-        ypos = (a_pos - b_pos) / (4 * self.nd_ref.params.native_res_factor)
-        if self.nd_ref.params.resolution == 2:  # Low-resolution mode
-            xpos *= 2
-            ypos *= 2
+        offset_xy = steps_to_xy_pos(self.nd_ref, offset[0] / 1000, offset[1] / 1000)
+        pos_xy = steps_to_xy_pos(self.nd_ref, pos[0], pos[1])
 
-        # self.message_fun(f"xpos, ypos: {xpos}, {ypos}") # Debug print statement
+        self.nd_ref.pen.phys.xpos = pos_xy[0] - offset_xy[0]    # Set global position
+        self.nd_ref.pen.phys.ypos = pos_xy[1] - offset_xy[1]    # Set global position
+        self.nd_ref.pen.phys.accum1 = 0                         # Clear accumulator value
+        self.nd_ref.pen.phys.accum2 = 0                         # Clear accumulator value
+        self.nd_ref.machine.clear_accumulators()                # Clear accumulators on EBB
 
-        self.nd_ref.pen.phys.xpos = xpos            # Set global position
-        self.nd_ref.pen.phys.ypos = ypos            # Set global position
-        self.nd_ref.machine.clear_accumulators()
+    def set_home(self):
+        ''' 
+        Reset step counter to zero at present position. Clear Origin Offset.
+        Set machine to believe that it has been "homed."
+        This becomes the "True" home position that walk_home returns to.
+        '''
+        serial_utils.exhaust_queue(self.nd_ref)             # Wait until all motion stops
+        self.nd_ref.machine.clear_steps()                   # Reset step position to (0,0)
+        serial_utils.write_step_offsets(self.nd_ref, 0, 0)  # Reset offset positions to (0, 0)
+        self.nd_ref.machine.var_write(1, 12)                # Update machine state: fully homed.
+        self.read_position()                                # Set xpos, ypos values
+
+
+    def adjust_origin_offset(self, delta_x, delta_y):
+        '''
+        Read the current origin offset value and adjust it by the delta_x, delta_y inputs.
+        delta_x and delta_y have units of inches.
+
+        In detail:
+        * Read out the existing origin offset (in units of steps * 1000), convert to XY inches.
+        * Add delta_x, delta_y, to existing offset origin to get new XY origin offset values
+        * Convert new origin offset values to units of steps * 1000
+        * Write new origin offsets to EBB variables
+        * Use read_position() to set the new xpos, ypos values accounting for the offset
+        '''
+
+        offset = serial_utils.read_step_offsets(self.nd_ref) # Query offset position
+        if offset is None:
+            self.message_fun("Error reading step positions.")
+            return
+
+        offset_xy = steps_to_xy_pos(self.nd_ref, offset[0] / 1000, offset[1] / 1000)
+        offset_x = offset_xy[0] + delta_x
+        offset_y = offset_xy[1] + delta_y
+        offset_ab = xy_to_step_pos(self.nd_ref, offset_x * 1000, offset_y * 1000)
+
+        # Write new offset positions:
+        serial_utils.write_step_offsets(self.nd_ref, offset_ab[0], offset_ab[1])
+        self.read_position() # Update xpos, ypos
+
+
+    def xy_to_step_pos_with_offset(self, x_dest, y_dest):
+        '''
+        Find and return the absolute (A, B) step position corresponding to a given
+        (X, Y) position in inches, accounting for any possible Origin Offset applied.
+        Inputs x_dest, y_dest are in inches
+        '''
+
+        offset = serial_utils.read_step_offsets(self.nd_ref) # Query offset position
+        if offset is None:
+            return None
+
+        offset_xy = steps_to_xy_pos(self.nd_ref, offset[0] / 1000, offset[1] / 1000)
+        x_dest += offset_xy[0]
+        y_dest += offset_xy[1]
+        dest_ab = xy_to_step_pos(self.nd_ref, x_dest, y_dest)
+
+        return(dest_ab[0], dest_ab[1])
+
+
+    def precision_move_to(self, x_dest, y_dest, rate=3000):
+        '''
+        Make an absolute move to the target destination with respect
+        to the current Origin Offset. Read out new position.
+        Inputs x_dest, y_dest are in inches.
+        rate, if given, is in steps per second.
+        This is a "dog leg" move that does not necessarily move in a straight line.
+        Use for absolute positioning only, not for drawing.
+        '''
+
+        ab_pos_dest = self.xy_to_step_pos_with_offset(x_dest, y_dest)
+        if ab_pos_dest is None:
+            return
+
+        if self.nd_ref.options.preview:
+            move_dist = plot_utils.distance(x_dest - self.nd_ref.pen.phys.xpos,\
+                y_dest - self.nd_ref.pen.phys.ypos)
+            self.nd_ref.plot_status.stats.add_dist(self.nd_ref, move_dist)
+            ab_pos_read = self.xy_to_step_pos_with_offset(self.nd_ref.pen.phys.xpos,\
+                self.nd_ref.pen.phys.ypos)
+            a_steps = abs(ab_pos_read[0] - ab_pos_dest[0])
+            b_steps = abs(ab_pos_read[1] - ab_pos_dest[1])
+
+            steps = max(a_steps, b_steps)
+            move_time = 1000 * (steps / rate)
+            self.nd_ref.plot_status.stats.pt_estimate += move_time
+            self.nd_ref.pen.phys.xpos = x_dest  # Update current position indicator.
+            self.nd_ref.pen.phys.ypos = y_dest
+            return
+
+        ab_pos_read = serial_utils.read_step_position(self.nd_ref)
+        if ab_pos_read is None:
+            return
+
+        if not ab_pos_dest == ab_pos_read:
+            serial_utils.abs_move_wrapper(self.nd_ref, ab_pos_dest[0], ab_pos_dest[1], rate)
+            move_dist_xy = steps_to_xy_pos(self.nd_ref,\
+                abs(ab_pos_dest[0] - ab_pos_read[0]),\
+                abs(ab_pos_dest[1] - ab_pos_read[1]))
+            move_dist = plot_utils.distance(move_dist_xy[0],\
+                move_dist_xy[1])
+            self.nd_ref.plot_status.stats.add_dist(self.nd_ref, move_dist)
+
+        self.read_position()
+
 
 if __name__ == '__main__':
     homer = HomingClass()

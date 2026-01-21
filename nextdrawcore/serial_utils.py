@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,23 +17,22 @@
 """
 serial_utils.py
 
-This module modularizes some serial functions..
+This module modularizes some serial functions.
 
 Part of the NextDraw driver software
 http://bantamtools.com
 
-Requires Python 3.8 or newer.
+Requires Python 3.9 or newer.
 
 """
 
 import time
-import math
+# import math
 
 from nextdrawcore.plot_utils_import import from_dependency_import # plotink
 plot_utils = from_dependency_import('plotink.plot_utils')
 
 # inkex = from_dependency_import('ink_extensions.inkex') # Optional for debug printing
-
 
 def connect(nd_ref, message_fun, logger, caller_in=None):
 
@@ -116,7 +115,7 @@ def read_status_byte(nd_ref):
         nd_ref.plot_status.limit = True
     if qg_val & 32:                     # Button press flag
         nd_ref.plot_status.button = True
-    if (qg_val & 64) and not (nd_ref.params.skip_voltage_check): # Power loss flag
+    if (qg_val & 64) and not nd_ref.params.skip_voltage_check: # Power loss flag
         if not nd_ref.plot_status.power:
             # Only update these status bits when we first see the power-lost flag.
             nd_ref.machine.var_write(0, 12) # Flag machine as not-homed
@@ -153,59 +152,21 @@ def exhaust_queue(nd_ref):
 
         time.sleep(0.050) # Use "short" 50 ms intervals for responsiveness
 
-
-def abs_move_origin(nd_ref, rate):
+def abs_move_wrapper(nd_ref, pos_1, pos_2, rate):
     """
-    Wrapper function for ebb3_motion.abs_move; moves to (0, 0) position at a given
-    rate, monitoring the pause button as it does so. The position that it moves to
-    is what the EBB believe is the (0, 0) position; it does not perform home detection.
+    Wrapper function for ebb3_motion.abs_move; moves to specific (A,B) axis position
+    at a given rate. Intended for very short correction moves only; 
+    does not split motion into segments to monitor pause button.
+    This is a "dog leg" move that does not necessarily move in a straight line.
+    Use for absolute positioning only, not for drawing.
     """
-    # STEP 1: FIND CURRENT PEN XY COORDS
-    if nd_ref.options.preview:
-        pos_1, pos_2 = nd_ref.pen.phys.xpos, nd_ref.pen.phys.ypos
-    else:
-        if nd_ref.machine.port is None:
-            return
 
-        exhaust_queue(nd_ref)
-        pos = nd_ref.machine.query_steps()
-        if pos is None:
-            return
+    # nd_ref.user_message_fun(f"abs_move_wrapper: {pos_1}, {pos_2}.") # debug print
+    if nd_ref.options.preview or (nd_ref.machine.port is None):
+        return
 
-        pos_1, pos_2 = pos
-        if pos_1 == pos_2 == 0:
-            return
+    nd_ref.machine.abs_move(rate, int(pos_1), int(pos_2))
 
-    # STEP 2: CALCULATE TIME
-    dist = plot_utils.distance(pos_1, pos_2)
-    time_tot = dist/rate
-    time_steps = math.ceil(time_tot/0.050) # Use fixed 50 ms time steps
-
-    # STEP 3: MOVE THE PEN
-    if nd_ref.options.preview:
-        nd_ref.plot_status.stats.pt_estimate += time_tot
-    else:
-        for step in range(time_steps):
-
-            if nd_ref.receive_pause_request(): # Keyboard interrupt detected!
-                return
-
-            qg_val = read_status_byte(nd_ref)
-            if qg_val is None:
-                return
-
-            if (nd_ref.plot_status.button) or (nd_ref.plot_status.power):
-                return  # Stop if power lost or button pressed
-
-            if step == time_steps - 1:
-                nd_ref.machine.abs_move(rate)
-            else:
-                pos_1a = ((time_steps - (step + 1))/time_steps) * pos_1
-                pos_2a = ((time_steps - (step + 1))/time_steps) * pos_2
-                nd_ref.machine.abs_move(rate, int(pos_1a), int(pos_2a))
-
-    # STEP 4: IF SUCCESSFUL, UPDATE WHERE THE SOFTWARE BELIEVES THE PEN IS
-    nd_ref.pen.phys.xpos, nd_ref.pen.phys.ypos = 0, 0
 
 def enable_motors(nd_ref):
     """
@@ -221,6 +182,7 @@ def enable_motors(nd_ref):
         local_speed_pendown = nd_ref.options.speed_pendown
 
     if not nd_ref.options.preview:
+        read_status_byte(nd_ref)
         nd_ref.machine.command("CU,60,135") # Enable power monitoring, threshold 135 (~4 V).
 
         response = nd_ref.machine.motors_query_enabled()
@@ -254,3 +216,36 @@ def enable_motors(nd_ref):
         # Low-res mode: Allow faster pen-up moves. Keep maximum pen-down speed the same.
         nd_ref.speed_penup = nd_ref.options.speed_penup * nd_ref.params.speed_up / 100.0
         nd_ref.speed_pendown = local_speed_pendown * nd_ref.params.speed_limit / 100.0
+
+
+def read_step_position(nd_ref):
+    """ Return step position """
+    if (nd_ref.machine.port is not None) and not nd_ref.options.preview:
+        exhaust_queue(nd_ref)
+        pos = nd_ref.machine.query_steps()
+        if pos is None:
+            return None
+        return pos
+    return None
+
+
+def read_step_offsets(nd_ref):
+    """ Read the to 32-bit motor-step offset values from the EBB. """
+    if nd_ref.options.preview:
+        return [0, 0]
+    if nd_ref.machine.port is not None:
+        offset_m1 = nd_ref.machine.var_read_int32(24)
+        offset_m2 = nd_ref.machine.var_read_int32(28)
+        offsets = [offset_m1, offset_m2]
+        if None not in offsets:
+            return offsets
+    return None
+
+def write_step_offsets(nd_ref, offset_1, offset_2):
+    """ Write the to 32-bit motor-step offset values from the EBB. """
+    if (nd_ref.machine.port is not None) and not nd_ref.options.preview:
+        success_1 = nd_ref.machine.var_write_int32(offset_1, 24)
+        success_2 = nd_ref.machine.var_write_int32(offset_2, 28)
+        if False not in [success_1, success_2]:
+            return True
+    return False

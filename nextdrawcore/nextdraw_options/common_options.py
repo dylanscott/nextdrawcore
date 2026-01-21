@@ -1,5 +1,5 @@
 '''
-Copyright 2024 Windell H. Oskay, Bantam Tools
+Copyright 2025 Windell H. Oskay, Bantam Tools
 Part of the NextDraw driver software
 http://bantamtools.com
 '''
@@ -189,7 +189,7 @@ def core_mode_options(config):
     options.add_argument("--utility_cmd",\
                         type=str, action="store", dest="utility_cmd",\
                         default=config["utility_cmd"],\
-                        help="Utility command. One of: [raise_pen, lower_pen, "\
+                        help="Utility command. One of: [raise_pen, lower_pen, set_home,"\
                         + "walk_x, walk_y, walk_mmx, walk_mmy, walk_home, enable_xy, "\
                         + "disable_xy, res_read, res_adj_in, res_adj_mm, bootload, "\
                         + "strip_data, read_name, list_names, write_name]. Default: read_name")

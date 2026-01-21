@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ formats for easier processing
 Part of the NextDraw driver software
 http://bantamtools.com
 
-Requires Python 3.8 or newer.
+Requires Python 3.9 or newer.
 """
 
 import logging
@@ -32,7 +32,7 @@ from math import sqrt
 from lxml import etree
 
 from nextdrawcore.nextdraw_options import models
-from nextdrawcore.plot_utils_import import from_dependency_import # plotink
+from nextdrawcore.plot_utils_import import from_dependency_import  # plotink
 path_objects = from_dependency_import('nextdrawcore.path_objects')
 simplepath = from_dependency_import('ink_extensions.simplepath')
 simplestyle = from_dependency_import('ink_extensions.simplestyle')
@@ -45,7 +45,7 @@ plot_utils = from_dependency_import('plotink.plot_utils')
 logger = logging.getLogger(__name__)
 
 
-class DigestSVG:# pylint: disable=pointless-string-statement
+class DigestSVG:  # pylint: disable=pointless-string-statement
     """
     Main class for parsing SVG document and "digesting" it into a path_objects.DocDigest
     object, a heavily simplified representation of the SVG contents.
@@ -61,7 +61,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
             logger.setLevel(logging.INFO)
             logger.addHandler(self.logging_attrs["default_handler"])
         if self.spew_debugdata:
-            logger.setLevel(logging.DEBUG) # by default level is INFO
+            logger.setLevel(logging.DEBUG)  # by default level is INFO
 
         self.nd_ref = nd_ref
         self.use_tag_nest_level = 0
@@ -73,7 +73,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
         # Variables that will be populated in process_svg():
         self.bezier_tolerance = 0   # Bezier tolerance
-        self.layer_selection = -2 # All layers; Matches default from plot_status.py
+        self.layer_selection = -2  # All layers; Matches default from plot_status.py
 
         self.doc_width_100 = 0
         self.doc_height_100 = 0
@@ -106,7 +106,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         self.doc_digest.width = self.nd_ref.svg_width
         self.doc_digest.height = self.nd_ref.svg_height
 
-        self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3 # Initialize
+        self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3  # Initialize
 
         # Store document information in doc_digest
         self.doc_digest.viewbox = f"0 0 {self.doc_digest.width:f} {self.doc_digest.height:f}"
@@ -116,7 +116,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         self.diagonal_100 = sqrt((self.doc_width_100)**2 + (self.doc_height_100)**2)/sqrt(2)
 
         docname = node_list.get('{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}docname')
-        if docname: # Previously: inkex.addNS('docname', 'sodipodi'),
+        if docname:
             self.doc_digest.name = docname
 
         root_layer = path_objects.LayerItem()
@@ -126,12 +126,11 @@ class DigestSVG:# pylint: disable=pointless-string-statement
         self.next_id += 1
         self.doc_digest.layers.append(root_layer)
 
-        self.current_layer = root_layer # Layer that graphical elements should be added to
+        self.current_layer = root_layer  # Layer that graphical elements should be added to
         self.current_layer_name = root_layer.name
 
         self.traverse(node_list, None, mat_current)
         return self.doc_digest
-
 
     def traverse(self, node_list, parent_style, mat_current):
         """
@@ -157,11 +156,11 @@ class DigestSVG:# pylint: disable=pointless-string-statement
             element_style = simplestyle.parseStyle(node.get('style'))
 
             # Presentation attributes, which have lower precedence than the style attribute:
-            if 'fill' not in element_style: # If the style has not been set...
+            if 'fill' not in element_style:         # If the style has not been set...
                 element_style['fill'] = node.get('fill')
-            if 'stroke' not in element_style: # If the style has not been set...
+            if 'stroke' not in element_style:       # If the style has not been set...
                 element_style['stroke'] = node.get('stroke')
-            if 'fill-rule' not in element_style: # If the style has not been set...
+            if 'fill-rule' not in element_style:    # If the style has not been set...
                 element_style['fill-rule'] = node.get('fill-rule')
             # Since these are added to the style dictionary, a potential problem is that
             # these are now treated on equal footing to CSS styling information.
@@ -170,7 +169,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
             if style_dict['display'] == 'none':
                 continue  # Do not plot this object or its children
-            if node.get('display') == 'none': # Possible SVG attribute as well
+            if node.get('display') == 'none':   # Possible SVG attribute as well
                 continue  # Do not plot this object or its children
 
             # Apply the current matrix transform to this node's transform
@@ -178,8 +177,8 @@ class DigestSVG:# pylint: disable=pointless-string-statement
             if trans is None:
                 mat_new = mat_current
             else:
-                mat_new = simpletransform.composeTransform(mat_current, \
-                simpletransform.parseTransform(trans))
+                mat_new = simpletransform.composeTransform(mat_current,
+                                                           simpletransform.parseTransform(trans))
 
             if node.tag in ('{http://www.w3.org/2000/svg}g', 'g'):
                 old_layer_name = self.current_layer_name
@@ -196,12 +195,12 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     new_layer.parse_name()
 
                     if new_layer.props.skip:
-                        continue # Skip Documentation layer and its contents
-                    if self.layer_selection >= 0: # Plotting in layers mode
+                        continue    # Skip Documentation layer and its contents
+                    if self.layer_selection >= 0:  # Plotting in layers mode
                         if new_layer.props.number is None:
                             continue
                         if self.layer_selection != new_layer.props.number:
-                            continue # Skip this layer and its contents
+                            continue  # Skip this layer and its contents
 
                     new_layer.item_id = str(self.next_id)
                     self.next_id += 1
@@ -215,8 +214,8 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     if self.current_layer.props.handling is None:
                         self.bezier_tolerance = self.nd_ref.params.curve_tolerance/3
                     else:
-                        tolerance_temp = models.find_curve_tolerance(self.nd_ref,\
-                            self.current_layer.props.handling)
+                        tolerance_temp = models.find_curve_tolerance(self.nd_ref,
+                                            self.current_layer.props.handling)
                         if tolerance_temp is not None:
                             self.bezier_tolerance = tolerance_temp/3
                         else:
@@ -228,14 +227,14 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     # that may appear in root before the next layer:
 
                     new_layer = path_objects.LayerItem()
-                    new_layer.name = '__digest-root__' # Label this as a "root" layer
+                    new_layer.name = '__digest-root__'  # Label this as a "root" layer
                     new_layer.item_id = str(self.next_id)
                     self.next_id += 1
 
                     self.doc_digest.layers.append(new_layer)
                     self.current_layer = new_layer
                     self.current_layer_name = new_layer.name
-                else: # Regular group or sublayer that we treat as a group.
+                else:  # Regular group or sublayer that we treat as a group.
                     self.traverse(node, style_dict, mat_new)
                 continue
 
@@ -285,11 +284,11 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                         y_val = float(node.get('y', '0'))
                         # Note: the transform has already been applied
                         if x_val != 0 or y_val != 0:
-                            mat_new2 = simpletransform.composeTransform(mat_new,\
+                            mat_new2 = simpletransform.composeTransform(mat_new,
                             simpletransform.parseTransform(f'translate({x_val:.6E},{y_val:.6E})'))
                         else:
                             mat_new2 = mat_new
-                        self.use_tag_nest_level += 1 # Keep track of nested "use" elements.
+                        self.use_tag_nest_level += 1  # Keep track of nested "use" elements.
                         self.traverse(refnode, style_dict, mat_new2)
                         self.use_tag_nest_level -= 1
                 continue
@@ -298,7 +297,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
             if self.layer_selection >= 0:
                 if self.current_layer_name == '__digest-root__':
-                    continue # Do not print root elements if layer_selection >= 0
+                    continue  # Do not print root elements if layer_selection >= 0
 
             if style_dict['visibility'] in ('hidden', 'collapse'):
                 # Not visible; Do not plot. (This comes after the container tags;
@@ -323,9 +322,9 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                 y = plot_utils.unitsToUserUnits(node.get('y', '0'), self.doc_height_100)
 
                 r_x, width = [plot_utils.unitsToUserUnits(node.get(attr),
-                    self.doc_width_100) for attr in ['rx', 'width']]
+                            self.doc_width_100) for attr in ['rx', 'width']]
                 r_y, height = [plot_utils.unitsToUserUnits(node.get(attr),
-                    self.doc_height_100) for attr in ['ry', 'height']]
+                            self.doc_height_100) for attr in ['ry', 'height']]
 
                 def calc_r_attr(attr, other_attr, twice_maximum):
                     value = (attr if attr is not None else
@@ -392,7 +391,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                 pl = node.get('points', '').strip()
                 if pl == '':
                     continue
-                pa = pl.replace(',', ' ').split() # replace comma with space before splitting
+                pa = pl.replace(',', ' ').split()  # replace comma with space before splitting
                 if not pa:
                     continue
                 path_length = len(pa)
@@ -408,7 +407,6 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     path_d += " Z"
                 self.digest_path(path_d, style_dict, mat_new)
                 continue
-
 
             if node.tag in ('{http://www.w3.org/2000/svg}ellipse', 'ellipse',
                             '{http://www.w3.org/2000/svg}circle', 'circle'):
@@ -429,7 +427,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                     r_y = r_x
                 else:
                     r_x, r_y = [plot_utils.unitsToUserUnits(node.get(attr, '0'),
-                        self.diagonal_100) for attr in ['rx', 'ry']]
+                                            self.diagonal_100) for attr in ['rx', 'ry']]
                 if r_x == 0 or r_y == 0:
                     continue
 
@@ -450,28 +448,30 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                 self.doc_digest.metadata.update(dict(node.attrib))
                 continue
 
-            if node.tag in ('{http://www.w3.org/2000/svg}plotdata', 'plotdata'):
+            if node.tag in ('{http://www.w3.org/2000/svg}plotdata', 'plotdata',
+                            '{https://bantam.tools/nd}plotdata'):
                 self.doc_digest.plotdata.update(dict(node.attrib))
                 continue
 
             if node.tag in ['{http://www.w3.org/2000/svg}defs', 'defs',
-                'namedview',
-                '{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview',
-                'eggbot', 'WCB', 'MergeData', '{http://www.w3.org/2000/svg}eggbot',
-                '{http://www.w3.org/2000/svg}WCB', '{http://www.w3.org/2000/svg}MergeData',
-                '{http://www.w3.org/2000/svg}title', 'title',
-                '{http://www.w3.org/2000/svg}desc', 'desc',
-                '{http://www.w3.org/2000/svg}pattern', 'pattern',
-                '{http://www.w3.org/2000/svg}radialGradient', 'radialGradient',
-                '{http://www.w3.org/2000/svg}linearGradient', 'linearGradient',
-                '{http://www.w3.org/2000/svg}style', 'style', #  external style sheet
-                '{http://www.w3.org/2000/svg}cursor', 'cursor',
-                '{http://www.w3.org/2000/svg}font', 'font',
-                '{http://www.w3.org/2000/svg}view', 'view',
-                '{http://www.inkscape.org/namespaces/inkscape}templateinfo',
-                '{http://www.w3.org/2000/svg}color-profile', 'color-profile',
-                '{http://www.w3.org/2000/svg}foreignObject', 'foreignObject',
-                etree.Comment]:
+                            'namedview',
+                            '{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview',
+                            'eggbot', 'WCB', 'MergeData', '{http://www.w3.org/2000/svg}eggbot',
+                            '{http://www.w3.org/2000/svg}WCB',
+                            '{http://www.w3.org/2000/svg}MergeData',
+                            '{http://www.w3.org/2000/svg}title', 'title',
+                            '{http://www.w3.org/2000/svg}desc', 'desc',
+                            '{http://www.w3.org/2000/svg}pattern', 'pattern',
+                            '{http://www.w3.org/2000/svg}radialGradient', 'radialGradient',
+                            '{http://www.w3.org/2000/svg}linearGradient', 'linearGradient',
+                            '{http://www.w3.org/2000/svg}style', 'style',  # external style sheet
+                            '{http://www.w3.org/2000/svg}cursor', 'cursor',
+                            '{http://www.w3.org/2000/svg}font', 'font',
+                            '{http://www.w3.org/2000/svg}view', 'view',
+                            '{http://www.inkscape.org/namespaces/inkscape}templateinfo',
+                            '{http://www.w3.org/2000/svg}color-profile', 'color-profile',
+                            '{http://www.w3.org/2000/svg}foreignObject', 'foreignObject',
+                            '{https://bantam.tools/ndm}data', etree.Comment]:
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}text', 'text',
@@ -512,7 +512,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
         parsed_path = cubicsuperpath.CubicSuperPath(simplepath.parsePath(path_d))
 
-        if len(parsed_path) == 0: # path length is zero, will not be plotted
+        if len(parsed_path) == 0:  # path length is zero, will not be plotted
             return
 
         # Apply the transformation to each point
@@ -522,7 +522,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
 
         # p is now a list of lists of cubic beziers [control pt1, control pt2, endpoint]
         # where the start-point is the last point in the previous segment.
-        for subpath in parsed_path: # for subpaths in the path:
+        for subpath in parsed_path:  # for subpaths in the path:
             # Divide each path into a set of straight segments:
             plot_utils.subdivideCubicPath(subpath, self.bezier_tolerance)
 
@@ -532,7 +532,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
             subpaths.append([[vertex[1][0], vertex[1][1]] for vertex in subpath])
 
         if len(subpaths) == 0:
-            return # At least one sub-path required
+            return  # At least one sub-path required
 
         new_path = path_objects.PathItem()
         new_path.fill = style_dict['fill']
@@ -549,7 +549,7 @@ class DigestSVG:# pylint: disable=pointless-string-statement
                 ok_to_fill = True   # As long as at least one path has more than two vertices
                 break
         if not ok_to_fill:
-            new_path.fill = None # Strip fill, if path has only 2-vertex subpaths
+            new_path.fill = None  # Strip fill, if path has only 2-vertex subpaths
 
         # Add new list of subpaths to the current "LayerItem" element:
         self.current_layer.paths.append(new_path)
@@ -565,7 +565,7 @@ def apply_transform_to_path(mat, path):
     [mt00, mt01, mt02], [mt10, mt11, mt12] = mat
     for comp in path:
         for ctl in comp:
-            for point in ctl: # apply transform to each point:
+            for point in ctl:  # apply transform to each point:
                 pt_x = point[0]
                 pt_y = point[1]
                 point[0] = mt00*pt_x + mt01*pt_y + mt02
@@ -584,24 +584,24 @@ def inherit_style(parent_style, node_style, visibility):
     default_style['stroke'] = None
     default_style['fill-rule'] = None
     default_style['visibility'] = 'visible'
-    default_style['display'] = None # A null value; not "display:none".
+    default_style['display'] = None  # A null value; not "display:none".
 
-    if parent_style is None: # Use default values when there is no parent
+    if parent_style is None:  # Use default values when there is no parent
         parent_style = default_style
 
     # Use copy, not assignment, so that new_style represents an independent dict:
     new_style = parent_style.copy()
 
-    if visibility: # Update first, allowing it to be overruled by style attributes
+    if visibility:  # Update first, allowing it to be overruled by style attributes
         new_style['visibility'] = visibility
 
-    if node_style is None: # No additional new style information provided.
+    if node_style is None:  # No additional new style information provided.
         return new_style
 
     for attrib in ['fill', 'stroke', 'fill-rule', 'visibility', 'display',]:
         # Valid for "string" attributes that DO NOT have units that need scaling;
         # Do not extend this to other style attributes without accounting for that.
-        value = node_style.get(attrib) # Defaults to None, preventing KeyError
+        value = node_style.get(attrib)  # Defaults to None, preventing KeyError
         if value:
             if value in ['inherit']:
                 new_style[attrib] = parent_style[attrib]
@@ -611,7 +611,7 @@ def inherit_style(parent_style, node_style, visibility):
     return new_style
 
 
-def verify_plob(svg, model):
+def verify_plob(svg, model, bounds, svg_width, svg_height):
     """
     Check to see if the provided SVG is a valid plob that can be automatically converted
     to a plot digest object. Also check that the plob version and hardware model match.
@@ -625,7 +625,9 @@ def verify_plob(svg, model):
     """
 
     data_node = None
-    nodes = svg.xpath("//*[self::svg:plotdata|self::plotdata]", namespaces=inkex.NSS)
+    nodes = svg.findall('{https://bantam.tools/nd}plotdata')
+    if not nodes:
+        nodes = svg.xpath("//*[self::svg:plotdata|self::plotdata]", namespaces=inkex.NSS)
     if nodes:
         data_node = nodes[0]
     if data_node is not None:
@@ -635,11 +637,8 @@ def verify_plob(svg, model):
         except TypeError:
             return False
     else:
-        return False # No plot data; Plob cannot be verified.
-    if svg_model:
-        if int(svg_model) != model:
-            return False
-    else:
+        return False  # No plot data; Plob cannot be verified.
+    if not svg_model:
         return False
     if svg_plob_version:
         if svg_plob_version != path_objects.PLOB_VERSION:
@@ -652,23 +651,37 @@ def verify_plob(svg, model):
         if node.tag in ['g', '{http://www.w3.org/2000/svg}g']:
             name_temp = node.get('{http://www.inkscape.org/namespaces/inkscape}label')
             if name_temp is None:
-                return False # All groups must be named
+                return False  # All groups must be named
             if len(str(name_temp)) > 0:
                 if str(name_temp)[0] == '%':
-                    continue # Skip Documentation layer and its contents
-            if node.get("transform"): # No transforms are allowed on plottable layers
+                    continue  # Skip Documentation layers and their contents
+            if node.get("transform"):  # No transforms are allowed on plottable layers
                 return False
             for subnode in node:
-                if subnode.get("transform"): # No transforms are allowed on objects
+                if subnode.get("transform"):  # No transforms are allowed on objects
                     return False
                 if subnode.tag in ['polyline', '{http://www.w3.org/2000/svg}polyline']:
                     continue
                 return False
-        elif node.tag in ['{http://www.w3.org/2000/svg}defs', 'defs', 'metadata',\
-                '{http://www.w3.org/2000/svg}metadata',\
-                '{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview',\
-                'plotdata', '{http://www.w3.org/2000/svg}plotdata']:
+        elif node.tag in ['{http://www.w3.org/2000/svg}defs', 'defs', 'metadata',
+                          '{http://www.w3.org/2000/svg}metadata',
+                          '{http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd}namedview',
+                          'plotdata', '{http://www.w3.org/2000/svg}plotdata',
+                          '{https://bantam.tools/ndm}data', '{https://bantam.tools/nd}plotdata']:
             continue
         else:
             return False
-    return True
+
+    if int(svg_model) == model:
+        return True
+    else:
+        # We have a special case at this point: This *is* a valid plob, but does not have an
+        # exact match to the specified plotter model. At this point, check to see if the SVG's
+        # width and height fit within the selected model's travel bounds. If so, approve this
+        # as a valid plob for the purposes of plotting.
+
+        [[_xzero, _yzero], [x_travel, y_travel]] = bounds
+        if (svg_width <= x_travel) and (svg_height <= y_travel):
+            return True
+
+    return False

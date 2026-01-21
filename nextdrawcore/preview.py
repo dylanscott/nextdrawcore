@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -32,7 +32,6 @@ import logging
 from lxml import etree
 
 from nextdrawcore.plot_utils_import import from_dependency_import
-from nextdrawcore import plan_utils
 simpletransform = from_dependency_import('ink_extensions.simpletransform')
 simplestyle = from_dependency_import('ink_extensions.simplestyle')
 inkex = from_dependency_import('ink_extensions.inkex')
@@ -43,9 +42,7 @@ logger = logging.getLogger(__name__)
 
 
 class VelocityChart:
-    """
-    Preview: Class for velocity data plots
-    """
+    """ Preview: Class for velocity data plots """
 
     def __init__(self):
         self.enable = False # Velocity charts are disabled by default. (Set True to enable.
@@ -89,10 +86,14 @@ class VelocityChart:
 
 
 
+
 class Preview:
     """
     Preview: Main class for organizing preview and rendering
     """
+
+    GROUPMODE_ATTR = '{http://www.inkscape.org/namespaces/inkscape}groupmode'
+    LAYER_LABEL_ATTR = '{http://www.inkscape.org/namespaces/inkscape}label'
 
     def __init__(self):
         self.path_data_pu = []  # pen-up path data for preview layers
@@ -137,22 +138,11 @@ class Preview:
             self.v_chart.update(nd_ref, vel_1, vel_2, vel_tot)
             self.v_chart.vel_data_time += move_time
             self.v_chart.update(nd_ref, vel_1, vel_2, vel_tot)
-        if nd_ref.rotate_page:
-            if nd_ref.params.auto_rotate_ccw: # Rotate counterclockwise 90 degrees
-                x_new_t = nd_ref.svg_width - f_new_y
-                y_new_t = f_new_x
-                x_old_t = nd_ref.svg_width - nd_ref.pen.phys.ypos
-                y_old_t = nd_ref.pen.phys.xpos
-            else:
-                x_new_t = f_new_y
-                x_old_t = nd_ref.pen.phys.ypos
-                y_new_t = nd_ref.svg_height - f_new_x
-                y_old_t = nd_ref.svg_height - nd_ref.pen.phys.xpos
-        else:
-            x_new_t = f_new_x
-            y_new_t = f_new_y
-            x_old_t = nd_ref.pen.phys.xpos
-            y_old_t = nd_ref.pen.phys.ypos
+        x_new_t = f_new_x
+        y_new_t = f_new_y
+        x_old_t = nd_ref.pen.phys.xpos
+        y_old_t = nd_ref.pen.phys.ypos
+
         if nd_ref.pen.phys.z_up:
             if nd_ref.params.preview_paths > 1: # Render pen-up movement
                 if nd_ref.pen.status.preview_pen_state != 1:
@@ -165,8 +155,6 @@ class Preview:
                     self.path_data_pd.append(f'M{x_old_t:0.3f} {y_old_t:0.3f}')
                     nd_ref.pen.status.preview_pen_state = 0
                 self.path_data_pd.append(f' {x_new_t:0.3f} {y_new_t:0.3f}')
-
-
 
 
     def log_td_move(self, nd_ref, move):
@@ -216,23 +204,11 @@ class Preview:
                 self.v_chart.vel_data_time += 1 # Add 1 ms
                 self.v_chart.update(nd_ref, vel_1, vel_2, vel_tot)
                 time += 25 # Increment by 1 ms.
+        x_new_t = f_new_x
+        y_new_t = f_new_y
+        x_old_t = nd_ref.pen.phys.xpos
+        y_old_t = nd_ref.pen.phys.ypos
 
-        if nd_ref.rotate_page:
-            if nd_ref.params.auto_rotate_ccw: # Rotate counterclockwise 90 degrees
-                x_new_t = nd_ref.svg_width - f_new_y
-                y_new_t = f_new_x
-                x_old_t = nd_ref.svg_width - nd_ref.pen.phys.ypos
-                y_old_t = nd_ref.pen.phys.xpos
-            else:
-                x_new_t = f_new_y
-                x_old_t = nd_ref.pen.phys.ypos
-                y_new_t = nd_ref.svg_height - f_new_x
-                y_old_t = nd_ref.svg_height - nd_ref.pen.phys.xpos
-        else:
-            x_new_t = f_new_x
-            y_new_t = f_new_y
-            x_old_t = nd_ref.pen.phys.xpos
-            y_old_t = nd_ref.pen.phys.ypos
         if nd_ref.pen.phys.z_up:
             if nd_ref.params.preview_paths > 1: # Render pen-up movement
                 if nd_ref.pen.status.preview_pen_state != 1:
@@ -250,9 +226,6 @@ class Preview:
                     self.path_data_pd.append(f' {x_old_t:0.3f} {y_old_t:0.3f}')
 
                 self.path_data_pd.append(f' {x_new_t:0.3f} {y_new_t:0.3f}')
-
-
-
 
 
     def log_t3_move(self, nd_ref, move):
@@ -302,22 +275,11 @@ class Preview:
 #             self.v_chart.vel_data_time += move_time - (time - 25)/25
 #             self.v_chart.update(nd_ref, vel_1, vel_2, vel_tot)
 
-        if nd_ref.rotate_page:
-            if nd_ref.params.auto_rotate_ccw: # Rotate counterclockwise 90 degrees
-                x_new_t = nd_ref.svg_width - f_new_y
-                y_new_t = f_new_x
-                x_old_t = nd_ref.svg_width - nd_ref.pen.phys.ypos
-                y_old_t = nd_ref.pen.phys.xpos
-            else:
-                x_new_t = f_new_y
-                x_old_t = nd_ref.pen.phys.ypos
-                y_new_t = nd_ref.svg_height - f_new_x
-                y_old_t = nd_ref.svg_height - nd_ref.pen.phys.xpos
-        else:
-            x_new_t = f_new_x
-            y_new_t = f_new_y
-            x_old_t = nd_ref.pen.phys.xpos
-            y_old_t = nd_ref.pen.phys.ypos
+        x_new_t = f_new_x
+        y_new_t = f_new_y
+        x_old_t = nd_ref.pen.phys.xpos
+        y_old_t = nd_ref.pen.phys.ypos
+
         if nd_ref.pen.phys.z_up:
             if nd_ref.params.preview_paths > 1: # Render pen-up movement
                 if nd_ref.pen.status.preview_pen_state != 1:
@@ -367,6 +329,28 @@ class Preview:
                 '''
                 self.path_data_pd.append(f' {x_new_t:0.3f} {y_new_t:0.3f}')
 
+    def find_preview_transform(self, nd_ref):
+        """
+        Perform calculation to find transformation that should be applied
+        to rendered previews
+        """
+
+        preview_transform = ''
+        if nd_ref.rotate_page:
+            if nd_ref.params.auto_rotate_ccw: # Default: Rotate counterclockwise 90 deg.
+                preview_transform = 'rotate(90)'
+                preview_transform += f'translate({0}, {-nd_ref.svg_width:.6E})'
+            else: # Rotate 90 deg clockwise instead
+                preview_transform = 'rotate(-90)'
+                preview_transform += f'translate({-nd_ref.svg_height:.6E},{0})'
+        s_x, s_y, o_x, o_y = nd_ref.vb_stash
+        preview_transform_2 = simpletransform.formatTransform(simpletransform.parseTransform(
+            f'translate({-o_x:.6E},{-o_y:.6E}) scale({1.0/s_x:.6E},{1.0/s_y:.6E})'))
+
+        return simpletransform.formatTransform(simpletransform.composeTransform(\
+                simpletransform.parseTransform(preview_transform_2),\
+                simpletransform.parseTransform(preview_transform)))
+
 
     def render(self, nd_ref):
         """ Render preview layers in the SVG document """
@@ -385,25 +369,45 @@ class Preview:
         if (not nd_ref.options.rendering) or (not nd_ref.params.preview_paths):
             return  # If preview rendering is disabled
 
-        s_x, s_y, o_x, o_y = nd_ref.vb_stash
+#         preview_transform = ''
+#         if nd_ref.rotate_page:
+#             if nd_ref.params.auto_rotate_ccw: # Default: Rotate counterclockwise 90 deg.
+#                 preview_transform = 'rotate(90)'
+#                 preview_transform += f'translate({0}, {-nd_ref.svg_width:.6E})'
+#             else: # Rotate 90 deg clockwise instead
+#                 preview_transform = 'rotate(-90)'
+#                 preview_transform += f'translate({-nd_ref.svg_height:.6E},{0})'
+#         s_x, s_y, o_x, o_y = nd_ref.vb_stash
+#         preview_transform_2 = simpletransform.formatTransform(simpletransform.parseTransform(
+#             f'translate({-o_x:.6E},{-o_y:.6E}) scale({1.0/s_x:.6E},{1.0/s_y:.6E})'))
+# 
+#         preview_transform = simpletransform.formatTransform(simpletransform.composeTransform(\
+#                 simpletransform.parseTransform(preview_transform_2),\
+#                 simpletransform.parseTransform(preview_transform)))
 
-        preview_transform = simpletransform.parseTransform(
-            f'translate({-o_x:.6E},{-o_y:.6E}) scale({1.0/s_x:.6E},{1.0/s_y:.6E})')
-        path_attrs = { 'transform': simpletransform.formatTransform(preview_transform)}
-        preview_layer = etree.Element(inkex.addNS('g', 'svg'),
-            path_attrs, nsmap=inkex.NSS)
 
-        preview_sl_u = etree.SubElement(preview_layer, inkex.addNS('g', 'svg'))
-        preview_sl_d = etree.SubElement(preview_layer, inkex.addNS('g', 'svg'))
+ 
+        preview_transform = self.find_preview_transform(nd_ref)
 
-        preview_layer.set(inkex.addNS('groupmode', 'inkscape'), 'layer')
-        preview_layer.set(inkex.addNS('label', 'inkscape'), '% Preview')
-        preview_sl_d.set(inkex.addNS('groupmode', 'inkscape'), 'layer')
-        preview_sl_d.set(inkex.addNS('label', 'inkscape'), 'Pen-down movement')
-        preview_sl_u.set(inkex.addNS('groupmode', 'inkscape'), 'layer')
-        preview_sl_u.set(inkex.addNS('label', 'inkscape'), 'Pen-up movement')
 
-        nd_ref.svg.append(preview_layer)
+
+        path_attrs = {'transform': preview_transform}
+
+        if nd_ref.options.digest: # Apply special transform for viewing preview in Plob.
+            path_attrs = {'data-transform': preview_transform} # Save original transform.
+            path_attrs['transform'] = simpletransform.formatTransform(\
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]) # Unity matrix
+
+        preview_layer = etree.SubElement(nd_ref.svg, 'g', path_attrs,)
+        preview_sl_u = etree.SubElement(preview_layer, 'g')
+        preview_sl_d = etree.SubElement(preview_layer, 'g')
+        preview_layer.set(self.GROUPMODE_ATTR, 'layer')
+        preview_layer.set(self.GROUPMODE_ATTR, 'layer')
+        preview_layer.set(self.LAYER_LABEL_ATTR, '% Preview')
+        preview_sl_d.set(self.GROUPMODE_ATTR, 'layer')
+        preview_sl_d.set(self.LAYER_LABEL_ATTR, 'Pen-down movement')
+        preview_sl_u.set(self.GROUPMODE_ATTR, 'layer')
+        preview_sl_u.set(self.LAYER_LABEL_ATTR, 'Pen-up movement')
 
         # Preview stroke width: Lesser of 1/1000 of page width or height:
         width_du = min(nd_ref.svg_width , nd_ref.svg_height) / 1000.0
@@ -437,19 +441,15 @@ class Preview:
             p_style.update({'stroke': nd_ref.params.preview_color_up})
             path_attrs = {
                 'style': simplestyle.formatStyle(p_style),
-                'd': " ".join(self.path_data_pu),
-                inkex.addNS('desc', ns_prefix): "pen-up transit"}
-            etree.SubElement(preview_sl_u,
-                             inkex.addNS('path', 'svg '), path_attrs, nsmap=inkex.NSS)
+                'd': " ".join(self.path_data_pu)}
+            etree.SubElement(preview_sl_u, 'path', path_attrs)
 
         if nd_ref.params.preview_paths in (1, 3):
             p_style.update({'stroke': nd_ref.params.preview_color_down})
             path_attrs = {
                 'style': simplestyle.formatStyle(p_style),
-                'd': " ".join(self.path_data_pd),
-                inkex.addNS('desc', ns_prefix): "pen-down drawing"}
-            etree.SubElement(preview_sl_d,
-                             inkex.addNS('path', 'svg '), path_attrs, nsmap=inkex.NSS)
+                'd': " ".join(self.path_data_pd)}
+            etree.SubElement(preview_sl_d,'path', path_attrs)
 
         if nd_ref.params.preview_paths > 0 and self.v_chart.enable: # Preview enabled w/ velocity
             self.v_chart.vel_chart1.insert(0, "M")
@@ -461,31 +461,32 @@ class Preview:
                 'style': simplestyle.formatStyle(p_style),
                 'd': " ".join(self.v_chart.vel_data_chart_t),
                 inkex.addNS('desc', ns_prefix): "Total V"}
-            etree.SubElement(preview_layer,
-                             inkex.addNS('path', 'svg '), path_attrs, nsmap=inkex.NSS)
+            etree.SubElement(preview_layer, 'path', path_attrs)
 
             p_style.update({'stroke': 'red'})
             path_attrs = {
                 'style': simplestyle.formatStyle(p_style),
                 'd': " ".join(self.v_chart.vel_chart1),
                 inkex.addNS('desc', ns_prefix): "Motor 1 V"}
-            etree.SubElement(preview_layer,
-                             inkex.addNS('path', 'svg '), path_attrs, nsmap=inkex.NSS)
+            etree.SubElement(preview_layer, 'path', path_attrs)
 
             p_style.update({'stroke': 'green'})
             path_attrs = {
                 'style': simplestyle.formatStyle(p_style),
                 'd': " ".join(self.v_chart.vel_chart2),
                 inkex.addNS('desc', ns_prefix): "Motor 2 V"}
-            etree.SubElement(preview_layer,
-                             inkex.addNS('path', 'svg '), path_attrs, nsmap=inkex.NSS)
+            etree.SubElement(preview_layer, 'path', path_attrs)
 
 def strip_data(nd_ref):
-    ''' remove plot and preview data from svg file '''
+    ''' remove all plot and preview data from svg file '''
     svg = nd_ref.document.getroot()
     for slug in ['WCB', 'MergeData', 'plotdata', 'eggbot']:
         for node in svg.xpath('//svg:' + slug, namespaces=inkex.NSS):
-            svg.remove(node)
+            svg.remove(node)                        # Older versions of stored data element
+    for node in svg.iterfind('{https://bantam.tools/nd}plotdata'):
+        node.getparent().remove(node) # Current version (nextdraw)
+    for node in svg.iterfind('{https://bantam.tools/ndm}data'):
+        node.getparent().remove(node) # Current version (merge)
     for node in svg.xpath('//svg:' + 'g', namespaces=inkex.NSS):
         str_layer_name = node.get('{http://www.inkscape.org/namespaces/inkscape}label')
         if str_layer_name is not None:

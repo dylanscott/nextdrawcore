@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -41,7 +41,6 @@ from nextdrawcore import serial_utils
 from nextdrawcore.plot_utils_import import from_dependency_import # plotink
 plot_utils = from_dependency_import('plotink.plot_utils')
 # inkex = from_dependency_import('ink_extensions.inkex')
-
 
 class PenPosition:
     ''' PenPosition: Class to store XYZ position of pen '''
@@ -233,6 +232,8 @@ class PenHandler:
                 ["utility", "align", "cycle"]):
                 time.sleep(float(v_time - 30) / 1000.0) # pause before issuing next command
             if nd_ref.params.use_b3_out: # I/O Pin B3 output: low
+                if nd_ref.params.sync_b3: # Add sync delays when using B3
+                    serial_utils.exhaust_queue(nd_ref) # Delay to exhaust motion control queue
                 nd_ref.machine.dio_b_set(3, 0)  # Function needs test
         self.phys.z_up = True
 
@@ -261,9 +262,9 @@ class PenHandler:
                 ["utility", "align", "cycle"]):
                 time.sleep(float(v_time - 30) / 1000.0) # pause before issuing next command
             if nd_ref.params.use_b3_out: # I/O Pin B3 output: high
+                if nd_ref.params.sync_b3: # Add sync delays when using B3
+                    serial_utils.exhaust_queue(nd_ref) # Delay to exhaust motion control queue
                 nd_ref.machine.dio_b_set(3, 1)  # Function needs test
-
-
         self.phys.z_up = False
 
     def cycle(self, nd_ref):
@@ -371,7 +372,6 @@ class PenHandler:
         '''
 
         self.heights.update(nd_ref) # Ensure heights and transit times are known
-
         if nd_ref.options.preview:
             self.phys.z_up = True
         if nd_ref.options.preview or (nd_ref.machine.port is None):
@@ -465,7 +465,7 @@ class PenHandler:
             # Power timeout is only applicable to legacy servo:
             nd_ref.machine.servo_timeout( nd_ref.params.servo_timeout, None)
 
-        self.status.init_state = self.status.init_goal # Save updated params
+        self.status.init_state = self.status.init_goal.copy() # Save updated params
 
         nd_ref.machine.var_write(code_up, 10)   # Save encoded pen-up position
         nd_ref.machine.var_write(code_down, 11) # Save encoded pen-down position

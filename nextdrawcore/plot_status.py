@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -56,7 +56,6 @@ class SVGPlotData:  # pylint: disable=too-few-public-methods, too-many-instance-
         self.plob_version = None
         self.rand_seed = None
         self.rand_start = None
-        self.row = None
         self.reset() # Set defaults
 
     def reset(self):
@@ -70,11 +69,10 @@ class SVGPlotData:  # pylint: disable=too-few-public-methods, too-many-instance-
         self.reordering = 0
         self.pause_dist = -1     # <0 is a flag that there is no resume data.
         self.pause_ref = -1      # <0 is a flag that there is no resume data.
-        self.pause_warn = 0      # > 1 is a flag that there is pause data
+        self.pause_warn = 0      # Cleared to zero when pause warning given to user
         self.plob_version = "n/a"
         self.rand_seed = 1
         self.rand_start = 0
-        self.row = 0
 
     def clean(self):
         """ Clean up settings when a plot finishes normally; indicate no resume needed """
@@ -115,8 +113,12 @@ class ResumeStatus:
         """
         self.read = False
         data_node = None
-        nodes = svg_tree.xpath("//*[self::svg:plotdata|self::plotdata]", namespaces=inkex.NSS)
+
+        nodes = svg_tree.findall('{https://bantam.tools/nd}plotdata') # Current version location
+        if not nodes:
+            nodes = svg_tree.xpath("//*[self::svg:plotdata|self::plotdata]", namespaces=inkex.NSS)
         if nodes:
+
             data_node = nodes[0]
         if data_node is not None:
             try: # Core data required for resuming plots
@@ -135,8 +137,6 @@ class ResumeStatus:
                     self.old.plob_version = "n/a"
                 self.old.rand_seed = int(float(data_node.get('rand_seed')))
                 self.old.rand_start = int(data_node.get('rand_start'))
-
-                self.old.row = int(data_node.get('row'))
                 self.read = True
             except TypeError: # An error leaves self.read as False.
                 try:
@@ -151,12 +151,12 @@ class ResumeStatus:
         pause_dist, pause_ref stored as integer with µm units
         """
         if not self.written:
-            for node in svg_tree.xpath("//*[self::svg:plotdata|self::plotdata]",\
-                namespaces=inkex.NSS):
-                node_parent = node.getparent()
-                node_parent.remove(node)
-            data_node = etree.SubElement(svg_tree, 'plotdata')
-
+            for node in svg_tree.iterfind('{https://bantam.tools/nd}plotdata'):
+                node.getparent().remove(node)
+            for node in svg_tree.iterfind('{http://www.w3.org/2000/svg}plotdata'):
+                node.getparent().remove(node)
+            data_node = etree.SubElement(svg_tree,\
+                etree.QName('https://bantam.tools/nd', 'plotdata'))
             if self.new.application == "":
                 self.new.application = "nextdraw"  # Name of this program
             data_node.set('application', self.new.application)
@@ -172,7 +172,6 @@ class ResumeStatus:
             data_node.set('plob_version', str(self.new.plob_version ))
             data_node.set('rand_seed', f"{self.new.rand_seed}")
             data_node.set('rand_start', str(self.new.rand_start))
-            data_node.set('row', f"{self.new.row}")
             self.written = True
 
     def copy_old(self):
@@ -190,7 +189,6 @@ class ResumeStatus:
         self.new.plob_version = self.old.plob_version
         self.new.rand_seed = self.old.rand_seed
         self.new.rand_start = self.old.rand_start
-        self.new.row = self.old.row
 
 
     def check_button(self, nd_ref):
@@ -200,8 +198,8 @@ class ResumeStatus:
         """
 
         # Uncomment next two lines to force a pause at a specific position
-        # if nd_ref.options.mode == "plot" and nd_ref.plot_status.stats.down_travel_inch > 6.0:
-        #     return 1
+        # if nd_ref.options.mode == "plot" and nd_ref.plot_status.stats.down_travel_inch >= 2350.151889:
+            # return 1
 
         if nd_ref.options.preview:
             return 0
@@ -287,17 +285,17 @@ class ResumeStatus:
         if nd_ref.params.pause_warning and self.old.pause_dist >= 0:
             return_text = "This document looks like it was paused while plotting.\n\n"
 
-            if nd_ref.options.submode=="none": # CLI and Python API return text
+            if (nd_ref.called_externally[0:15] == 'nextdraw merge,') or\
+                    nd_ref.options.submode != "none":
+                return_text += "To resume plotting, use the Resume function instead.\n" +\
+                    "To start from the beginning of the file, run this again."
+            else:
+                # if nd_ref.options.submode=="none": # CLI and Python API return text
                 return_text += "To resume a plot, use the res_plot mode.\n" +\
                     "Or, to start from the beginning of the file, \n" +\
                     " (1) Plot the output SVG from this command or \n" +\
                     " (2) use the strip_data utility command."
-            else: # GUI (Inkscape) return text
-                return_text += "To resume plotting, use the Resume function instead.\n" +\
-                    "To start from the beginning of the file, run this again."
-            # self.new.pause_warn = 0      # Remove warning.
-            # self.write_to_svg(nd_ref.svg)
-            # nd_ref.plot_status.stopped = 106 # Resume warning
+
             return return_text
         return None
 

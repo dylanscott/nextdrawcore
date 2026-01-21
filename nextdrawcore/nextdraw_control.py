@@ -1,4 +1,4 @@
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ nextdraw_control.py
 Part of the NextDraw driver software
 http://bantamtools.com
 
-Requires Python 3.8 or newer
+Requires Python 3.9 or newer
 """
 
 import copy
@@ -73,6 +73,7 @@ class NextDrawWrapperClass( inkex.Effect ):
     def set_up_pause_transmitter(self):
         """ intercept ctrl-C (keyboard interrupt) and redefine as "pause" command """
         signal.signal(signal.SIGINT, self.transmit_pause_request)
+        signal.signal(signal.SIGTERM, self.transmit_pause_request)
         # one pause event for all nextdraws
         self.software_initiated_pause_event = Event()
 
@@ -118,7 +119,7 @@ class NextDrawWrapperClass( inkex.Effect ):
             3: Plot to all attached NextDraw units
         '''
 
-        if self.options.preview or self.options.digest > 1:
+        if self.options.preview or (self.options.digest == 2):
             self.options.port_config = 1 # Offline modes; Ignore port & multi-machine options
 
         if self.options.mode == "res_plot":
@@ -246,6 +247,7 @@ class NextDrawWrapperClass( inkex.Effect ):
                     logger.error('Error on secondary NextDraw: ' + nd.error_out)
 
     def parseFile(self, input_file):
+        '''compatibility layer'''
         self.parse(input_file)
 
 if __name__ == '__main__':

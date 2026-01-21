@@ -1,9 +1,9 @@
 # nextdraw_conf.py
 # Part of the NextDraw driver software
 #
-# Version 1.1.0, dated 2024-05-27.
+# Version 1.4.0, dated 2025-03-18.
 #
-# Copyright 2024 Windell H. Oskay, Bantam Tools
+# Copyright 2025 Windell H. Oskay, Bantam Tools
 
 '''
 Primary user-adjustable control parameters:
@@ -133,6 +133,11 @@ check_updates = True    # If True, allow NextDraw software to check online to se
 use_b3_out = False      # If True, enable digital output pin B3, which will be high (3.3V)
                         #   when the pen is down, and low otherwise. Can be used to control
                         #   external devices like valves, relays, or lasers.
+
+sync_b3 = True          # If True, AND use_b3_out is also True, then exhaust the motion queue
+                        #   before changing the state of the B3 output. This allows the 
+                        #   B3 output to be properly synchronized with motion command, but
+                        #   does add a delay when using the B3 output.
 
 auto_rotate_ccw = True  # If True (default), auto-rotate is counter-clockwise when active.
                         #   If False, auto-rotate direction is clockwise.
