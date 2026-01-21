@@ -26,6 +26,7 @@ http://bantamtools.com
 
 
 # import time
+import functools
 import math
 import logging
 
@@ -39,6 +40,44 @@ plot_utils = from_dependency_import('plotink.plot_utils')
 ebb_calc = from_dependency_import('plotink.ebb_calc')
 
 logger = logging.getLogger(__name__)
+
+
+@functools.cache
+def format_precision_width(width_value, units=''):
+    """
+    Cached precision width formatting with optimized calculation.
+
+    This function handles both stroke widths and other width values that need
+    variable precision formatting. Uses range-based precision for common values
+    to avoid repeated "expensive" mathematical operations.
+
+    The motivation for this function is that Stroke-width is a css style attribute
+    that cannot use scientific notation, yet we need a wide range of precision.
+
+    Args:
+        width_value (float): The width value to format
+        units (str): Optional units to append (e.g., 'in', 'px', '')
+
+    Returns:
+        str: Formatted width string with appropriate precision and optional units
+    """
+    if width_value >= 1.0:
+        formatted = f"{width_value:.3f}"
+    elif width_value >= 0.1:
+        formatted = f"{width_value:.4f}"
+    elif width_value >= 0.01:
+        formatted = f"{width_value:.5f}"
+    elif width_value >= 0.001:
+        formatted = f"{width_value:.6f}"
+    elif width_value >= 0.0001:
+        formatted = f"{width_value:.7f}"
+    else:
+        # Fallback for very small values (cached after first calculation)
+        log_ten = math.log10(width_value)
+        precision = int(math.ceil(-log_ten) + 3)
+        formatted = f"{width_value:.{precision}f}"
+
+    return formatted + units
 
 
 class VelocityChart:
@@ -426,12 +465,8 @@ class Preview:
         if width_du == 0:
             return # Bad preview circumstances
 
-        log_ten = math.log10(width_du)
-        if log_ten > 0:  # For width_du > 1
-            width_string = f'{width_du:.3f}'
-        else:
-            prec = int(math.ceil(-log_ten) + 3)
-            width_string = f'{width_du:.{prec}f}'
+        # Use cached, optimized precision formatting
+        width_string = format_precision_width(width_du)
 
         p_style = {'stroke-width': width_string, 'fill': 'none',
             'stroke-linejoin': 'round', 'stroke-linecap': 'round'}

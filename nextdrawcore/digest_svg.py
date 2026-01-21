@@ -45,6 +45,330 @@ plot_utils = from_dependency_import('plotink.plot_utils')
 logger = logging.getLogger(__name__)
 
 
+# Standalone utility functions for shape-to-path conversion and transform processing
+# These functions can be used independently of the DigestSVG class for modular shape processing
+
+def _convert_rect_to_path(element, doc_width_100=1.0, doc_height_100=1.0):
+    """
+    Convert rectangle to path data with proper unit handling.
+
+    Args:
+        element: Rectangle element to convert
+        doc_width_100: Document width scaling factor for unit conversion (default 1.0)
+        doc_height_100: Document height scaling factor for unit conversion (default 1.0)
+
+    Returns:
+        string - SVG path data, or empty string for invalid rectangles
+    """
+    x = plot_utils.unitsToUserUnits(element.get('x', '0'), doc_width_100)
+    y = plot_utils.unitsToUserUnits(element.get('y', '0'), doc_height_100)
+    r_x = plot_utils.unitsToUserUnits(element.get('rx'), doc_width_100)
+    width = plot_utils.unitsToUserUnits(element.get('width'), doc_width_100)
+    r_y = plot_utils.unitsToUserUnits(element.get('ry'), doc_height_100)
+    height = plot_utils.unitsToUserUnits(element.get('height'), doc_height_100)
+
+    # Convert None values to 0 (happens when attributes are missing or invalid)
+    r_x = r_x if r_x is not None else 0.0
+    width = width if width is not None else 0.0
+    r_y = r_y if r_y is not None else 0.0
+    height = height if height is not None else 0.0
+
+    def calc_r_attr(attr, other_attr, twice_maximum):
+        value = (attr if attr is not None else
+                 other_attr if other_attr is not None else
+                 0)
+        if twice_maximum <= 0:
+            return 0
+        return min(value, twice_maximum * 0.5)
+
+    r_x = calc_r_attr(r_x, r_y, width)
+    r_y = calc_r_attr(r_y, r_x, height)
+
+    instr = []
+    if (r_x > 0) or (r_y > 0):
+        instr.append(['M ', [x + r_x, y]])
+        instr.append([' L ', [x + width - r_x, y]])
+        instr.append([' A ', [r_x, r_y, 0, 0, 1, x + width, y + r_y]])
+        instr.append([' L ', [x + width, y + height - r_y]])
+        instr.append([' A ', [r_x, r_y, 0, 0, 1, x + width - r_x, y + height]])
+        instr.append([' L ', [x + r_x, y + height]])
+        instr.append([' A ', [r_x, r_y, 0, 0, 1, x, y + height - r_y]])
+        instr.append([' L ', [x, y + r_y]])
+        instr.append([' A ', [r_x, r_y, 0, 0, 1, x + r_x, y]])
+    else:
+        instr.append(['M ', [x, y]])
+        instr.append([' L ', [x + width, y]])
+        instr.append([' L ', [x + width, y + height]])
+        instr.append([' L ', [x, y + height]])
+        instr.append([' L ', [x, y]])
+
+    return simplepath.formatPath(instr)
+
+
+def _convert_line_to_path(element, doc_width_100=1.0, doc_height_100=1.0):
+    """
+    Convert line to path data with proper unit handling.
+
+    Args:
+        element: Line element to convert
+        doc_width_100: Document width scaling factor for unit conversion (default 1.0)
+        doc_height_100: Document height scaling factor for unit conversion (default 1.0)
+
+    Returns:
+        string - SVG path data
+    """
+    x_1, x_2 = [plot_utils.unitsToUserUnits(element.get(attr, '0'),
+                doc_width_100) for attr in ['x1', 'x2']]
+    y_1, y_2 = [plot_utils.unitsToUserUnits(element.get(attr, '0'),
+                doc_height_100) for attr in ['y1', 'y2']]
+
+    # Convert None values to 0 (happens when attributes are invalid)
+    x_1 = x_1 if x_1 is not None else 0.0
+    x_2 = x_2 if x_2 is not None else 0.0
+    y_1 = y_1 if y_1 is not None else 0.0
+    y_2 = y_2 if y_2 is not None else 0.0
+
+    path_a = []
+    path_a.append(['M ', [x_1, y_1]])
+    path_a.append([' L ', [x_2, y_2]])
+    return simplepath.formatPath(path_a)
+
+
+def _convert_polyline_polygon_to_path(element):
+    """
+    Convert a polyline or polygon element to path data string.
+    """
+    pl = element.get('points', '').strip()
+    if pl == '':
+        return ''
+
+    pa = pl.replace(',', ' ').split()  # replace comma with space before splitting
+    if not pa:
+        return ''
+
+    path_length = len(pa)
+    if path_length < 4:  # Minimum of x1,y1 x2,y2 required.
+        return ''
+
+    path_d = "M " + pa[0] + " " + pa[1]
+    i = 2
+    while i < (path_length - 1):
+        path_d += " L " + pa[i] + " " + pa[i + 1]
+        i += 2
+
+    if element.tag in ('{http://www.w3.org/2000/svg}polygon', 'polygon'):
+        path_d += " Z"
+
+    return path_d
+
+
+def _convert_circle_ellipse_to_path(element, doc_width_100=1.0, doc_height_100=1.0,
+                                    diagonal_100=1.0):
+    """
+    Convert circle/ellipse to path data with proper unit handling.
+
+    Args:
+        element: Circle or ellipse element to convert
+        doc_width_100: Document width scaling factor for unit conversion (default 1.0)
+        doc_height_100: Document height scaling factor for unit conversion (default 1.0)
+        diagonal_100: Document diagonal scaling factor for radius conversion (default 1.0)
+
+    Returns:
+        string - SVG path data, or empty string for zero radius
+    """
+    if element.tag in ('{http://www.w3.org/2000/svg}circle', 'circle'):
+        r_x = plot_utils.unitsToUserUnits(element.get('r', '0'), diagonal_100)
+        r_y = r_x
+    else:
+        r_x = plot_utils.unitsToUserUnits(element.get('rx', '0'), diagonal_100)
+        r_y = plot_utils.unitsToUserUnits(element.get('ry', '0'), diagonal_100)
+
+    # Convert None values to 0 (happens when attributes are invalid)
+    r_x = r_x if r_x is not None else 0.0
+    r_y = r_y if r_y is not None else 0.0
+
+    if r_x == 0 or r_y == 0:
+        return ''   # Return empty string for zero radius
+
+    c_x = plot_utils.unitsToUserUnits(element.get('cx', '0'), doc_width_100)
+    c_y = plot_utils.unitsToUserUnits(element.get('cy', '0'), doc_height_100)
+
+    # Convert None values to 0 (happens when attributes are invalid)
+    c_x = c_x if c_x is not None else 0.0
+    c_y = c_y if c_y is not None else 0.0
+
+    # SVG standard: start at "3 o'clock" position (rightmost point)
+    # Use clockwise direction for proper textPath behavior (text on outside of circle)
+    start_x = c_x + r_x  # 3 o'clock (rightmost)
+    left_x = c_x - r_x   # 9 o'clock (leftmost)
+
+    path_d = f'M {start_x:f},{c_y:f} ' + \
+             f'A {r_x:f},{r_y:f} ' + \
+             f'0 1 1 {left_x:f},{c_y:f} ' + \
+             f'A {r_x:f},{r_y:f} ' + \
+             f'0 1 1 {start_x:f},{c_y:f}'
+
+    return path_d
+
+
+def process_shape_to_path_data(element, parent_transform=None):
+    """
+    Convert a single SVG shape element to path data string.
+
+    Args:
+        element: lxml element (rect, circle, ellipse, line, polyline, polygon, path)
+        parent_transform: Optional transform matrix to apply
+
+    Returns:
+        dict: {
+            'path_data': str,      # SVG path data string
+            'success': bool,       # True if conversion succeeded
+            'error': str or None   # Error message if conversion failed
+        }
+    """
+    # Initialize result structure
+    result = {
+        'path_data': '',
+        'success': False,
+        'error': None
+    }
+
+    try:
+        # Extract existing logic for each shape type using existing pattern
+        if element.tag in ('{http://www.w3.org/2000/svg}rect', 'rect'):
+            result['path_data'] = _convert_rect_to_path(element)
+        elif element.tag in ('{http://www.w3.org/2000/svg}circle', 'circle',
+                             '{http://www.w3.org/2000/svg}ellipse', 'ellipse'):
+            result['path_data'] = _convert_circle_ellipse_to_path(element)
+        elif element.tag in ('{http://www.w3.org/2000/svg}line', 'line'):
+            result['path_data'] = _convert_line_to_path(element)
+        elif element.tag in ('{http://www.w3.org/2000/svg}polyline', 'polyline',
+                             '{http://www.w3.org/2000/svg}polygon', 'polygon'):
+            result['path_data'] = _convert_polyline_polygon_to_path(element)
+        elif element.tag in ('{http://www.w3.org/2000/svg}path', 'path'):
+            result['path_data'] = element.get('d', '')
+        else:
+            result['error'] = f"Unsupported shape type: {element.tag}"
+            return result
+
+        # Apply transform if provided
+        if parent_transform and result['path_data']:
+            result['path_data'] = apply_transform_to_path_data(
+                result['path_data'], parent_transform
+            )
+
+        result['success'] = True
+
+    except Exception as e:
+        result['error'] = str(e)
+        result['success'] = False
+
+    return result
+
+
+def apply_transform_to_path_data(path_data, transform_matrix):
+    """
+    Apply transformation matrix to SVG path data.
+
+    Args:
+        path_data: SVG path data string
+        transform_matrix: 6-element transformation matrix [a, b, c, d, e, f]
+                         or 2x3 matrix [[a, b, c], [d, e, f]]
+
+    Returns:
+        str: Transformed path data string
+    """
+    if not path_data or not path_data.strip():
+        return path_data
+
+    try:
+        # Handle both 6-element list and 2x3 matrix formats
+        if isinstance(transform_matrix, list) and len(transform_matrix) == 6:
+            # Convert [a, b, c, d, e, f] to [[a, b, c], [d, e, f]]
+            mat = [[transform_matrix[0], transform_matrix[1], transform_matrix[2]],
+                   [transform_matrix[3], transform_matrix[4], transform_matrix[5]]]
+        else:
+            mat = transform_matrix
+
+        # Parse path to cubic superpath format
+        csp = cubicsuperpath.parsePath(path_data)
+
+        # Apply transform using existing utilities
+        apply_transform_to_path(mat, csp)
+
+        # Convert back to path data string
+        return cubicsuperpath.formatPath(csp)
+
+    except Exception:
+        return path_data # If transformation fails, return original path data
+
+
+def extract_element_transform(element):
+    """
+    Extract and parse transform attribute from SVG element.
+
+    Args:
+        element: lxml element with potential transform attribute
+
+    Returns:
+        list or None: 6-element transform matrix or None if no transform
+    """
+    trans = element.get("transform")
+    if trans is None:
+        return None
+
+    try:
+        transform_matrix = simpletransform.parseTransform(trans)
+        return transform_matrix
+    except Exception:
+        return None
+
+
+def process_single_svg_element(element, parent_transform=None):
+    """
+    Complete processing of a single SVG element including transforms.
+
+    Args:
+        element: lxml element to process
+        parent_transform: Optional parent transformation matrix
+
+    Returns:
+        dict: Complete processing result including path data and final transform
+    """
+    result = {
+        'path_data': '',
+        'success': False,
+        'error': None,
+        'element_transform': None,
+        'combined_transform': None
+    }
+
+    try:
+        element_transform = extract_element_transform(element)
+        result['element_transform'] = element_transform
+
+        combined_transform = parent_transform
+        if parent_transform is not None and element_transform is not None:
+            combined_transform = simpletransform.composeTransform(
+                                    parent_transform, element_transform)
+        elif element_transform is not None:
+            combined_transform = element_transform
+
+        result['combined_transform'] = combined_transform
+
+        shape_result = process_shape_to_path_data(element, combined_transform)
+
+        result['path_data'] = shape_result['path_data']
+        result['success'] = shape_result['success']
+        result['error'] = shape_result['error']
+
+    except Exception as e:
+        result['error'] = str(e)
+        result['success'] = False
+
+    return result
+
+
 class DigestSVG:  # pylint: disable=pointless-string-statement
     """
     Main class for parsing SVG document and "digesting" it into a path_objects.DocDigest
@@ -72,7 +396,7 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
         self.doc_digest = path_objects.DocDigest()
 
         # Variables that will be populated in process_svg():
-        self.bezier_tolerance = 0   # Bezier tolerance
+        self.bezier_tolerance = 0.005   # Bezier tolerance - safe default to prevent infinite loops
         self.layer_selection = -2  # All layers; Matches default from plot_status.py
 
         self.doc_width_100 = 0
@@ -183,7 +507,8 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
             if node.tag in ('{http://www.w3.org/2000/svg}g', 'g'):
                 old_layer_name = self.current_layer_name
                 if old_layer_name == '__digest-root__' and\
-                    node.get('{http://www.inkscape.org/namespaces/inkscape}groupmode') == 'layer':
+                    node.get(
+                        '{http://www.inkscape.org/namespaces/inkscape}groupmode') == 'layer':
                     # Ensure that sublayers are treated like regular groups only
 
                     str_layer_name = node.get('{http://www.inkscape.org/namespaces/inkscape}label')
@@ -285,7 +610,8 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
                         # Note: the transform has already been applied
                         if x_val != 0 or y_val != 0:
                             mat_new2 = simpletransform.composeTransform(mat_new,
-                            simpletransform.parseTransform(f'translate({x_val:.6E},{y_val:.6E})'))
+                                simpletransform.parseTransform(
+                                    f'translate({x_val:.6E},{y_val:.6E})'))
                         else:
                             mat_new2 = mat_new
                         self.use_tag_nest_level += 1  # Keep track of nested "use" elements.
@@ -310,138 +636,30 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}rect', 'rect'):
-                """
-                Create a path with the outline of the rectangle
-                Manually transform  <rect x="X" y="Y" width="W" height="H"/>
-                    into            <path d="MX,Y lW,0 l0,H l-W,0 z"/>
-                Draw three sides of the rectangle explicitly and the fourth implicitly
-                https://www.w3.org/TR/SVG11/shapes.html#RectElement
-                """
-
-                x = plot_utils.unitsToUserUnits(node.get('x', '0'), self.doc_width_100)
-                y = plot_utils.unitsToUserUnits(node.get('y', '0'), self.doc_height_100)
-
-                r_x, width = [plot_utils.unitsToUserUnits(node.get(attr),
-                            self.doc_width_100) for attr in ['rx', 'width']]
-                r_y, height = [plot_utils.unitsToUserUnits(node.get(attr),
-                            self.doc_height_100) for attr in ['ry', 'height']]
-
-                def calc_r_attr(attr, other_attr, twice_maximum):
-                    value = (attr if attr is not None else
-                             other_attr if other_attr is not None else
-                             0)
-                    return min(value, twice_maximum * .5)
-
-                r_x = calc_r_attr(r_x, r_y, width)
-                r_y = calc_r_attr(r_y, r_x, height)
-
-                instr = []
-                if (r_x > 0) or (r_y > 0):
-                    instr.append(['M ', [x + r_x, y]])
-                    instr.append([' L ', [x + width - r_x, y]])
-                    instr.append([' A ', [r_x, r_y, 0, 0, 1, x + width, y + r_y]])
-                    instr.append([' L ', [x + width, y + height - r_y]])
-                    instr.append([' A ', [r_x, r_y, 0, 0, 1, x + width - r_x, y + height]])
-                    instr.append([' L ', [x + r_x, y + height]])
-                    instr.append([' A ', [r_x, r_y, 0, 0, 1, x, y + height - r_y]])
-                    instr.append([' L ', [x, y + r_y]])
-                    instr.append([' A ', [r_x, r_y, 0, 0, 1, x + r_x, y]])
-                else:
-                    instr.append(['M ', [x, y]])
-                    instr.append([' L ', [x + width, y]])
-                    instr.append([' L ', [x + width, y + height]])
-                    instr.append([' L ', [x, y + height]])
-                    instr.append([' L ', [x, y]])
-
-                self.digest_path(simplepath.formatPath(instr), style_dict, mat_new)
+                path_data = _convert_rect_to_path(node, self.doc_width_100, self.doc_height_100)
+                if path_data:  # Empty string for invalid shapes
+                    self.digest_path(path_data, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}line', 'line'):
-                """
-                Convert an SVG line object  <line x1="X1" y1="Y1" x2="X2" y2="Y2/>
-                to an SVG path object:      <path d="MX1,Y1 LX2,Y2"/>
-                """
-                x_1, x_2 = [plot_utils.unitsToUserUnits(node.get(attr, '0'),
-                    self.doc_width_100) for attr in ['x1', 'x2']]
-                y_1, y_2 = [plot_utils.unitsToUserUnits(node.get(attr, '0'),
-                    self.doc_height_100) for attr in ['y1', 'y2']]
-
-                path_a = []
-                path_a.append(['M ', [x_1, y_1]])
-                path_a.append([' L ', [x_2, y_2]])
-                self.digest_path(simplepath.formatPath(path_a), style_dict, mat_new)
+                path_data = _convert_line_to_path(node, self.doc_width_100, self.doc_height_100)
+                if path_data:
+                    self.digest_path(path_data, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}polyline', 'polyline',
                             '{http://www.w3.org/2000/svg}polygon', 'polygon'):
-                """
-                Convert
-                 <polyline points="x1,y1 x2,y2 x3,y3 [...]"/>
-                OR
-                 <polyline points="x1 y1 x2 y2 x3 y3 [...]"/>
-                OR
-                 <polygon points="x1,y1 x2,y2 x3,y3 [...]"/>
-                OR
-                 <polygon points="x1 y1 x2 y2 x3 y3 [...]"/>
-                to
-                  <path d="Mx1,y1 Lx2,y2 Lx3,y3 [...]"/> (with a closing Z on polygons)
-                Ignore polylines with no points, or polylines with only a single point.
-                """
-
-                pl = node.get('points', '').strip()
-                if pl == '':
-                    continue
-                pa = pl.replace(',', ' ').split()  # replace comma with space before splitting
-                if not pa:
-                    continue
-                path_length = len(pa)
-                if path_length < 4:  # Minimum of x1,y1 x2,y2 required.
-                    continue
-                path_d = "M " + pa[0] + " " + pa[1]
-                i = 2
-                while i < (path_length - 1):
-                    path_d += " L " + pa[i] + " " + pa[i + 1]
-                    i += 2
-
-                if node.tag in ('{http://www.w3.org/2000/svg}polygon', 'polygon'):
-                    path_d += " Z"
-                self.digest_path(path_d, style_dict, mat_new)
+                path_data = _convert_polyline_polygon_to_path(node)
+                if path_data:  # Empty string for invalid/insufficient points
+                    self.digest_path(path_data, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}ellipse', 'ellipse',
                             '{http://www.w3.org/2000/svg}circle', 'circle'):
-                """
-                Convert circles and ellipses to paths as two 180 degree arcs.
-                In general (an ellipse), we convert
-                  <ellipse rx="RX" ry="RY" cx="X" cy="Y"/>
-                to
-                  <path d="MX1,CY A RX,RY 0 1 0 X2,CY A RX,RY 0 1 0 X1,CY"/>
-                where
-                  X1 = CX - RX
-                  X2 = CX + RX
-                Ellipses or circles with a radius attribute of 0 are ignored
-                """
-
-                if node.tag in ('{http://www.w3.org/2000/svg}circle', 'circle'):
-                    r_x = plot_utils.unitsToUserUnits(node.get('r', '0'), self.diagonal_100)
-                    r_y = r_x
-                else:
-                    r_x, r_y = [plot_utils.unitsToUserUnits(node.get(attr, '0'),
-                                            self.diagonal_100) for attr in ['rx', 'ry']]
-                if r_x == 0 or r_y == 0:
-                    continue
-
-                c_x = plot_utils.unitsToUserUnits(node.get('cx', '0'), self.doc_width_100)
-                c_y = plot_utils.unitsToUserUnits(node.get('cy', '0'), self.doc_height_100)
-
-                x_1 = c_x - r_x
-                x_2 = c_x + r_x
-                path_d = f'M {x_1:f},{c_y:f} ' + \
-                         f'A {r_x:f},{r_y:f} ' + \
-                         f'0 1 0 {x_2:f},{c_y:f} ' + \
-                         f'A {r_x:f},{r_y:f} ' + \
-                         f'0 1 0 {x_1:f},{c_y:f}'
-                self.digest_path(path_d, style_dict, mat_new)
+                path_data = _convert_circle_ellipse_to_path(node, self.doc_width_100,
+                                                            self.doc_height_100, self.diagonal_100)
+                if path_data:  # Empty string for zero radius
+                    self.digest_path(path_data, style_dict, mat_new)
                 continue
 
             if node.tag in ('{http://www.w3.org/2000/svg}metadata', 'metadata'):
@@ -491,7 +709,7 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
             text = str(node.tag).split('}')
             self.nd_ref.warnings.add_new(str(text[-1]), self.current_layer_name)
 
-    def digest_path(self, path_d, style_dict, mat_transform):
+    def digest_path(self, path_d, style_dict, mat_transform, return_pathitem=False):
         """
         Parse the path while applying the matrix transformation mat_transform.
         - Input is the "d" string attribute from an SVG path.
@@ -499,10 +717,16 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
         - Subdivide the cubic path into a list, rendering to straight segments within tolerance.
         - Identify subpaths within each path
         - Build a path_objects.PathItem object and append it to the current layer
-        """
 
-        # logger.debug('digest_path()\n')
-        # logger.debug('path d: ' + path_d)
+        Args:
+            path_d: SVG path "d" attribute string
+            style_dict: Dictionary of style properties
+            mat_transform: Transformation matrix to apply
+            return_pathitem: If True, return the PathItem instead of appending to layer
+
+        Returns:
+            PathItem object if return_pathitem=True, otherwise None (existing behavior)
+        """
 
         if path_d is None:
             return
@@ -551,10 +775,11 @@ class DigestSVG:  # pylint: disable=pointless-string-statement
         if not ok_to_fill:
             new_path.fill = None  # Strip fill, if path has only 2-vertex subpaths
 
-        # Add new list of subpaths to the current "LayerItem" element:
-        self.current_layer.paths.append(new_path)
-
-        # logger.debug('End of digest_path()\n')
+        # Return the PathItem if requested
+        if return_pathitem:
+            return new_path
+        else:  # Add new list of subpaths to the current "LayerItem" element:
+            self.current_layer.paths.append(new_path)
 
 
 def apply_transform_to_path(mat, path):
@@ -625,8 +850,12 @@ def verify_plob(svg, model, bounds, svg_width, svg_height):
     """
 
     data_node = None
+    # First try to find plotdata element using the current namespace (NextDraw v1.4+)
     nodes = svg.findall('{https://bantam.tools/nd}plotdata')
     if not nodes:
+        # Fall back to legacy plotdata element formats for backward compatibility
+        # This supports plob files created by older versions of the software
+        # that stored plotdata in different namespaces or without namespaces
         nodes = svg.xpath("//*[self::svg:plotdata|self::plotdata]", namespaces=inkex.NSS)
     if nodes:
         data_node = nodes[0]
@@ -646,12 +875,46 @@ def verify_plob(svg, model, bounds, svg_width, svg_height):
     else:
         return False
 
+    # Add viewBox format validation
+    viewbox = svg.get('viewBox')
+    if viewbox is not None:  # Check if attribute exists (including empty string)
+        if not viewbox.strip():  # Empty or whitespace-only string
+            return False  # Empty viewBox is invalid
+        try:
+            coords = [float(x) for x in viewbox.split()]
+            if len(coords) != 4 or coords[2] <= 0 or coords[3] <= 0:
+                return False  # Invalid viewBox: must have 4 coords with positive width/height
+        except (ValueError, TypeError):
+            return False  # Malformed viewBox attribute
+
     # inkex.errormsg( "Passed plotdata checks") # Optional halfwaypoint check
     for node in svg:
         if node.tag in ['g', '{http://www.w3.org/2000/svg}g']:
             name_temp = node.get('{http://www.inkscape.org/namespaces/inkscape}label')
             if name_temp is None:
-                return False  # All groups must be named
+                # Allow empty groups with no plottable content per PLOB policy
+                # Recursively check for any graphical elements that could affect plotting
+                def has_plottable_elements(element):
+                    # Check if this element itself is plottable
+                    if element.tag in [
+                        'polyline', '{http://www.w3.org/2000/svg}polyline',
+                        'path', '{http://www.w3.org/2000/svg}path',
+                        'line', '{http://www.w3.org/2000/svg}line',
+                        'rect', '{http://www.w3.org/2000/svg}rect',
+                        'circle', '{http://www.w3.org/2000/svg}circle',
+                        'ellipse', '{http://www.w3.org/2000/svg}ellipse',
+                        'polygon', '{http://www.w3.org/2000/svg}polygon'
+                    ]:
+                        return True
+                    # Recursively check children
+                    for child in element:
+                        if has_plottable_elements(child):
+                            return True
+                    return False
+
+                if has_plottable_elements(node):
+                    return False  # Groups with plottable content must be named
+                continue  # Skip empty groups (they can't plot anyway)
             if len(str(name_temp)) > 0:
                 if str(name_temp)[0] == '%':
                     continue  # Skip Documentation layers and their contents

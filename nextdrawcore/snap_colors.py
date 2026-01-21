@@ -26,7 +26,7 @@ to separate layers based on their assigned colors.
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-__version__ = "1.0.2"  # Dated 2025-04-10
+__version__ = "1.1.0"  # Dated 2025-07-14
 
 import math
 from copy import deepcopy
@@ -212,7 +212,13 @@ class ColorSnap(inkex.Effect):
             return
 
         # Process the document for color snapping and find existing layers
-        self.get_attribs(self.document.getroot())
+        if self.options.ids:
+            # Process only selected objects
+            for one_id in self.options.ids:
+                self.get_attribs(self.selected[one_id])
+        else:
+            # Process entire document
+            self.get_attribs(self.document.getroot())
         if not self.options.snap_layers:
             return
 
@@ -244,7 +250,13 @@ class ColorSnap(inkex.Effect):
         for i, layer in color_to_layer.items():
             if self.color_names[i] not in self.layers_processed:
                 self.layers_processed.append(self.color_names[i])
-                self.move_colored_nodes(self.document.getroot(), layer, i)
+                if self.options.ids:
+                    # Process only selected objects
+                    for one_id in self.options.ids:
+                        self.move_colored_nodes(self.selected[one_id], layer, i)
+                else:
+                    # Process entire document
+                    self.move_colored_nodes(self.document.getroot(), layer, i)
 
         # Remove empty created layers
         for i in created_layers:

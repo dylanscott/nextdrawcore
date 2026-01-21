@@ -26,7 +26,7 @@ Requires Python 3.9 or newer
 """
 # pylint: disable=pointless-string-statement
 
-__version__ = '1.4.6'  # Dated 2025-05-30
+__version__ = '1.5.0'  # Dated 2025-07-14
 
 import copy
 import gettext
@@ -229,7 +229,7 @@ class NextDraw(inkex.Effect):
             self.called_externally
         except AttributeError:
             self.called_externally = ""
-        ext_version_check = versions.min_merge_version(self.called_externally, "1.4.0")
+        ext_version_check = versions.min_merge_version(self.called_externally, "1.5.0")
         if ext_version_check is not None:
             self.user_message_fun(ext_version_check)
             return
@@ -545,13 +545,17 @@ class NextDraw(inkex.Effect):
 
         # Modifications to SVG -- including re-ordering and text substitution
         #   may be made at this point, and will not be preserved.
+        # Try to get valid viewBox scaling, fallback to PX_PER_INCH if needed
         v_b = self.svg.get('viewBox')
-        if v_b:
-            p_a_r = self.svg.get('preserveAspectRatio')
-            vb_scale_out = plot_utils.vb_scale(v_b, p_a_r, self.svg_width, self.svg_height)
+        vb_scale_out = plot_utils.vb_scale_2(v_b, self.svg.get('preserveAspectRatio'),
+                                             self.svg_width, self.svg_height)
+        if vb_scale_out is not None:  # Valid viewBox: Use the calculated scaling
             s_x, s_y, o_x, o_y = vb_scale_out
-        else:
-            s_x, s_y, o_x, o_y = 1.0, 1.0, 0.0, 0.0
+        else:  # No viewBox or invalid viewBox - use PX_PER_INCH scaling
+            s_x = 1.0 / float(plot_utils.PX_PER_INCH)
+            s_y = s_x
+            o_x = 0.0
+            o_y = 0.0
         self.vb_stash = s_x, s_y, o_x, o_y
 
         # Initial transform of document is based on viewbox, if present:
